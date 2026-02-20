@@ -1,0 +1,29 @@
+package com.mustafabulu.billing.paymentservice.api;
+
+import com.mustafabulu.billing.paymentservice.api.dto.ProcessPaymentRequest;
+import com.mustafabulu.billing.paymentservice.application.PaymentApplicationService;
+import com.mustafabulu.billing.paymentservice.domain.PaymentResult;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/payments")
+public class PaymentController {
+
+    private final PaymentApplicationService paymentApplicationService;
+
+    public PaymentController(PaymentApplicationService paymentApplicationService) {
+        this.paymentApplicationService = paymentApplicationService;
+    }
+
+    @PostMapping("/process")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public PaymentResult process(@Valid @RequestBody ProcessPaymentRequest request) {
+        return paymentApplicationService.process(request);
+    }
+}
