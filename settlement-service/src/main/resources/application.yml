@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: settlement-service
+server:
+  port: 0
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
