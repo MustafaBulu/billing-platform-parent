@@ -2,7 +2,10 @@ package com.mustafabulu.billing.settlementservice.application;
 
 import com.mustafabulu.billing.settlementservice.api.dto.StartSettlementRequest;
 import com.mustafabulu.billing.settlementservice.domain.SettlementSaga;
+import com.mustafabulu.billing.settlementservice.domain.SettlementStatus;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,32 +18,32 @@ public class SettlementSagaService {
 
     public SettlementSaga start(StartSettlementRequest request) {
         String sagaId = "SAGA-" + UUID.randomUUID();
+        List<SettlementStatus> transitions = new ArrayList<>();
+        transitions.add(SettlementStatus.STARTED);
 
-        SettlementSaga started = new SettlementSaga(
+        SettlementStatus finalStatus;
+        if ("SUCCESS".equalsIgnoreCase(request.paymentStatus())) {
+            transitions.add(SettlementStatus.PAYMENT_CONFIRMED);
+            transitions.add(SettlementStatus.SETTLED);
+            finalStatus = SettlementStatus.SETTLED;
+        } else {
+            transitions.add(SettlementStatus.FAILED);
+            finalStatus = SettlementStatus.FAILED;
+        }
+
+        SettlementSaga saga = new SettlementSaga(
                 sagaId,
                 request.tenantId(),
                 request.invoiceId(),
                 request.paymentTransactionId(),
                 request.amount(),
                 request.currency(),
-                "STARTED",
+                finalStatus,
+                List.copyOf(transitions),
                 Instant.now()
         );
-        sagas.put(sagaId, started);
-
-        SettlementSaga completed = new SettlementSaga(
-                sagaId,
-                request.tenantId(),
-                request.invoiceId(),
-                request.paymentTransactionId(),
-                request.amount(),
-                request.currency(),
-                "COMPLETED",
-                Instant.now()
-        );
-        sagas.put(sagaId, completed);
-
-        return completed;
+        sagas.put(sagaId, saga);
+        return saga;
     }
 
     public SettlementSaga getById(String sagaId) {

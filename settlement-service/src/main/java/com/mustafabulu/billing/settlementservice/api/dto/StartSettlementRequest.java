@@ -10,6 +10,7 @@ public record StartSettlementRequest(
         @NotBlank String invoiceId,
         @NotBlank String paymentTransactionId,
         @NotNull @Positive BigDecimal amount,
-        @NotBlank String currency
+        @NotBlank String currency,
+        @NotBlank String paymentStatus
 ) {
 }

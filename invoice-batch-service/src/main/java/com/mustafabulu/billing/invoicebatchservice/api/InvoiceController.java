@@ -2,6 +2,8 @@ package com.mustafabulu.billing.invoicebatchservice.api;
 
 import com.mustafabulu.billing.invoicebatchservice.api.dto.GenerateInvoiceRequest;
 import com.mustafabulu.billing.invoicebatchservice.application.InvoiceGenerationService;
+import com.mustafabulu.billing.invoicebatchservice.application.InvoiceOrchestrationService;
+import com.mustafabulu.billing.invoicebatchservice.application.dto.InvoiceOrchestrationResult;
 import com.mustafabulu.billing.invoicebatchservice.domain.Invoice;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -18,9 +20,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class InvoiceController {
 
     private final InvoiceGenerationService invoiceGenerationService;
+    private final InvoiceOrchestrationService invoiceOrchestrationService;
 
-    public InvoiceController(InvoiceGenerationService invoiceGenerationService) {
+    public InvoiceController(InvoiceGenerationService invoiceGenerationService,
+                             InvoiceOrchestrationService invoiceOrchestrationService) {
         this.invoiceGenerationService = invoiceGenerationService;
+        this.invoiceOrchestrationService = invoiceOrchestrationService;
     }
 
     @PostMapping("/generate")
@@ -32,5 +37,11 @@ public class InvoiceController {
     @GetMapping("/{invoiceId}")
     public Invoice getById(@PathVariable("invoiceId") String invoiceId) {
         return invoiceGenerationService.findById(invoiceId);
+    }
+
+    @PostMapping("/generate-and-settle")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public InvoiceOrchestrationResult generateAndSettle(@Valid @RequestBody GenerateInvoiceRequest request) {
+        return invoiceOrchestrationService.generateAndSettle(request);
     }
 }

@@ -1,18 +1,18 @@
-package com.mustafabulu.billing.settlementservice.domain;
+package com.mustafabulu.billing.invoicebatchservice.application.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
-public record SettlementSaga(
+public record SettlementResponse(
         String sagaId,
         String tenantId,
         String invoiceId,
         String paymentTransactionId,
         BigDecimal amount,
         String currency,
-        SettlementStatus status,
-        List<SettlementStatus> transitions,
+        String status,
+        List<String> transitions,
         Instant updatedAt
 ) {
 }
