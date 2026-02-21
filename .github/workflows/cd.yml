@@ -67,11 +67,23 @@ jobs:
 
   deploy-k8s:
     needs: build-and-push
-    if: ((github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) && secrets.KUBE_CONFIG != ''
+    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Check deploy secret
+        id: deploy_guard
+        shell: bash
+        run: |
+          if [[ -z "${{ secrets.KUBE_CONFIG }}" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "KUBE_CONFIG secret is not set. Skipping Kubernetes deploy."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Resolve workflow ref
+        if: steps.deploy_guard.outputs.enabled == 'true'
         id: vars
         shell: bash
         run: |
@@ -83,14 +95,17 @@ jobs:
           echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
+        if: steps.deploy_guard.outputs.enabled == 'true'
         uses: actions/checkout@v4
 
       - name: Setup kubectl
+        if: steps.deploy_guard.outputs.enabled == 'true'
         uses: azure/setup-kubectl@v4
         with:
           version: "v1.31.0"
 
       - name: Configure kubeconfig
+        if: steps.deploy_guard.outputs.enabled == 'true'
         shell: bash
         run: |
           mkdir -p "$HOME/.kube"
@@ -102,9 +117,11 @@ jobs:
           fi
 
       - name: Apply base manifests
+        if: steps.deploy_guard.outputs.enabled == 'true'
         run: kubectl apply -k ops/k8s/base
 
       - name: Update deployment images
+        if: steps.deploy_guard.outputs.enabled == 'true'
         run: |
           kubectl -n billing-platform set image deployment/tenant-service tenant-service=ghcr.io/${{ steps.vars.outputs.owner }}/billing-platform-tenant-service:sha-${{ steps.vars.outputs.sha }}
           kubectl -n billing-platform set image deployment/usage-service usage-service=ghcr.io/${{ steps.vars.outputs.owner }}/billing-platform-usage-service:sha-${{ steps.vars.outputs.sha }}
@@ -114,6 +131,7 @@ jobs:
           kubectl -n billing-platform set image deployment/settlement-service settlement-service=ghcr.io/${{ steps.vars.outputs.owner }}/billing-platform-settlement-service:sha-${{ steps.vars.outputs.sha }}
 
       - name: Wait for rollout
+        if: steps.deploy_guard.outputs.enabled == 'true'
         run: |
           kubectl -n billing-platform rollout status deployment/tenant-service --timeout=180s
           kubectl -n billing-platform rollout status deployment/usage-service --timeout=180s
