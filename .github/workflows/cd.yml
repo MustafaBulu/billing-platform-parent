@@ -58,6 +58,15 @@ jobs:
       - name: Build jar for ${{ matrix.service }}
         run: ./mvnw -B -ntp -pl ${{ matrix.service }} -am clean package -DskipTests
 
+      - name: Debug build inputs for ${{ matrix.service }}
+        shell: bash
+        run: |
+          echo "Checked out SHA: $(git rev-parse --short HEAD)"
+          echo "Dockerfile content:"
+          sed -n '1,20p' "${{ matrix.service }}/Dockerfile"
+          echo "Target directory content:"
+          ls -la "${{ matrix.service }}/target"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
