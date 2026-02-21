@@ -14,7 +14,10 @@ public class OutboxEventDocument {
     private String eventType;
     private String payload;
     private String status;
+    private int attemptCount;
+    private String lastError;
     private Instant createdAt;
+    private Instant publishedAt;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -28,6 +31,12 @@ public class OutboxEventDocument {
     public void setPayload(String payload) { this.payload = payload; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public int getAttemptCount() { return attemptCount; }
+    public void setAttemptCount(int attemptCount) { this.attemptCount = attemptCount; }
+    public String getLastError() { return lastError; }
+    public void setLastError(String lastError) { this.lastError = lastError; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public Instant getPublishedAt() { return publishedAt; }
+    public void setPublishedAt(Instant publishedAt) { this.publishedAt = publishedAt; }
 }

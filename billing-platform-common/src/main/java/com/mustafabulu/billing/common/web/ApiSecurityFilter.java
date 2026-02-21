@@ -8,7 +8,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,11 +27,14 @@ public class ApiSecurityFilter extends OncePerRequestFilter {
 
     private final ObjectMapper objectMapper;
 
-    @Value("${platform.security.api-key.enabled:false}")
-    private boolean apiKeyEnabled;
+    @Value("${platform.security.auth.mode:none}")
+    private String authMode;
 
     @Value("${platform.security.api-key.value:}")
     private String expectedApiKey;
+
+    @Value("${platform.security.bearer.tokens:}")
+    private String bearerTokens;
 
     @Value("${platform.security.tenant-guard.enabled:false}")
     private boolean tenantGuardEnabled;
@@ -47,13 +53,8 @@ public class ApiSecurityFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (apiKeyEnabled) {
-            String apiKey = request.getHeader("X-API-Key");
-            if (apiKey == null || apiKey.isBlank() || !apiKey.equals(expectedApiKey)) {
-                writeError(response, request, HttpStatus.UNAUTHORIZED, "AUTH_INVALID_API_KEY",
-                        "Missing or invalid API key");
-                return;
-            }
+        if (!authorize(request, response)) {
+            return;
         }
 
         if (tenantGuardEnabled && path.startsWith("/api/v1/")) {
@@ -66,6 +67,53 @@ public class ApiSecurityFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean authorize(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String mode = authMode == null ? "none" : authMode.trim().toLowerCase();
+        switch (mode) {
+            case "none":
+                return true;
+            case "api-key":
+                String apiKey = request.getHeader("X-API-Key");
+                if (apiKey == null || apiKey.isBlank() || !apiKey.equals(expectedApiKey)) {
+                    writeError(response, request, HttpStatus.UNAUTHORIZED, "AUTH_INVALID_API_KEY",
+                            "Missing or invalid API key");
+                    return false;
+                }
+                return true;
+            case "bearer":
+                String authorization = request.getHeader("Authorization");
+                if (authorization == null || !authorization.startsWith("Bearer ")) {
+                    writeError(response, request, HttpStatus.UNAUTHORIZED, "AUTH_BEARER_REQUIRED",
+                            "Missing bearer token");
+                    return false;
+                }
+                String token = authorization.substring("Bearer ".length()).trim();
+                Set<String> allowedTokens = parseAllowedTokens();
+                if (allowedTokens.isEmpty() || !allowedTokens.contains(token)) {
+                    writeError(response, request, HttpStatus.UNAUTHORIZED, "AUTH_INVALID_BEARER",
+                            "Invalid bearer token");
+                    return false;
+                }
+                return true;
+            default:
+                writeError(response, request, HttpStatus.INTERNAL_SERVER_ERROR, "AUTH_MODE_INVALID",
+                        "Unsupported auth mode: " + authMode);
+                return false;
+        }
+    }
+
+    private Set<String> parseAllowedTokens() {
+        if (bearerTokens == null || bearerTokens.isBlank()) {
+            return Set.of();
+        }
+        Set<String> allowed = new HashSet<>();
+        Arrays.stream(bearerTokens.split(","))
+                .map(String::trim)
+                .filter(token -> !token.isBlank())
+                .forEach(allowed::add);
+        return allowed;
     }
 
     private boolean isPublicPath(String path) {

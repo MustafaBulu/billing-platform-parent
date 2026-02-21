@@ -59,12 +59,19 @@ docker compose -f docker-compose.local.yml up -d
 
 ### Security & Observability Toggles
 Common defaults are added to each service `application.properties`:
-- `platform.security.api-key.enabled=false`
-- `platform.security.api-key.value=change-me`
+- `platform.security.auth.mode=none` (`none` | `api-key` | `bearer`)
+- `platform.security.api-key.value=${PLATFORM_SECURITY_API_KEY_VALUE:}`
+- `platform.security.bearer.tokens=${PLATFORM_SECURITY_BEARER_TOKENS:}` (comma-separated allowlist)
 - `platform.security.tenant-guard.enabled=false`
+- `platform.rate-limit.enabled=true`
+- `platform.rate-limit.max-requests=240`
+- `platform.rate-limit.window-seconds=60`
 
-If `platform.security.api-key.enabled=true`, send:
+If `platform.security.auth.mode=api-key`, send:
 - Header: `X-API-Key: <your-key>`
+
+If `platform.security.auth.mode=bearer`, send:
+- Header: `Authorization: Bearer <token>`
 
 If `platform.security.tenant-guard.enabled=true`, send:
 - Header: `X-Tenant-Id: <tenant-id>`
@@ -72,6 +79,27 @@ If `platform.security.tenant-guard.enabled=true`, send:
 Request correlation:
 - Request header (optional): `X-Request-Id`
 - Response header (always): `X-Request-Id`
+
+### Observability
+- Prometheus: `http://localhost:9091`
+- Grafana: `http://localhost:3300`
+- Service metrics: `http://localhost:<port>/actuator/prometheus`
+- Liveness/Readiness: `http://localhost:<port>/actuator/health/liveness`, `http://localhost:<port>/actuator/health/readiness`
+
+Example local env values:
+```bash
+export PLATFORM_SECURITY_API_KEY_VALUE='dev-api-key'
+export PLATFORM_SECURITY_BEARER_TOKENS='dev-token-1,dev-token-2'
+export GF_SECURITY_ADMIN_USER='admin'
+export GF_SECURITY_ADMIN_PASSWORD='strong-local-password'
+```
+
+### Orchestration Reliability
+- Invoice service now includes outbox publisher job:
+  - `platform.outbox.publisher.enabled=true`
+  - `platform.outbox.publisher.batch-size=50`
+  - `platform.outbox.publisher.fixed-delay-ms=5000`
+- Outbox events are marked `SENT`/`FAILED` with retry attempt tracking.
 
 ## Next Iterations
 - Add MongoDB + Oracle persistence adapters
