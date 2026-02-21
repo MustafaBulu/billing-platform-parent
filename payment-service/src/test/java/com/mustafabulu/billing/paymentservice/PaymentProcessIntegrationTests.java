@@ -66,6 +66,8 @@ class PaymentProcessIntegrationTests {
                 """;
 
         MvcResult result = mockMvc.perform(post("/api/v1/payments/process")
+                        .header("Authorization", "Bearer dev-admin-token")
+                        .header("X-Tenant-Id", "tenant-a")
                         .contentType(APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isAccepted())
@@ -97,6 +99,7 @@ class PaymentProcessIntegrationTests {
                 """;
 
         MvcResult first = mockMvc.perform(post("/api/v1/payments/process")
+                        .header("Authorization", "Bearer dev-admin-token")
                         .contentType(APPLICATION_JSON)
                         .header("X-Tenant-Id", "tenant-from-header")
                         .header("X-Idempotency-Key", "idem-from-header")
@@ -106,6 +109,7 @@ class PaymentProcessIntegrationTests {
                 .andReturn();
 
         MvcResult second = mockMvc.perform(post("/api/v1/payments/process")
+                        .header("Authorization", "Bearer dev-admin-token")
                         .contentType(APPLICATION_JSON)
                         .header("X-Tenant-Id", "tenant-from-header")
                         .header("X-Idempotency-Key", "idem-from-header")
