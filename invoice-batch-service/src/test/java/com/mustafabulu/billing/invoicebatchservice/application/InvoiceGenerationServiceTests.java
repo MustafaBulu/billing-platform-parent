@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.dao.DuplicateKeyException;
 
 class InvoiceGenerationServiceTests {
 
@@ -69,5 +70,37 @@ class InvoiceGenerationServiceTests {
 
         assertThat(invoice.totalAmount()).isEqualByComparingTo("12.50");
         assertThat(invoice.tenantId()).isEqualTo("tenant-1");
+    }
+
+    @Test
+    void shouldFallbackToExistingInvoiceWhenSaveHitsDuplicate() {
+        GenerateInvoiceRequest request = new GenerateInvoiceRequest(
+                "tenant-1",
+                "customer-1",
+                "2026-02",
+                "USD",
+                List.of(new BigDecimal("1.00")),
+                "idem-3"
+        );
+        InvoiceDocument existing = new InvoiceDocument();
+        existing.setInvoiceId("INV-dup");
+        existing.setTenantId("tenant-1");
+        existing.setCustomerId("customer-1");
+        existing.setBillingPeriod("2026-02");
+        existing.setTotalAmount(new BigDecimal("1.00"));
+        existing.setCurrency("USD");
+        existing.setStatus("GENERATED");
+        existing.setCreatedAt(Instant.parse("2026-02-21T00:00:00Z"));
+
+        when(invoiceRepository.findByTenantIdAndOperationCodeAndIdempotencyKey(
+                "tenant-1", "INVOICE_GENERATE", "tenant-1:INVOICE_GENERATE:idem-3"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(existing));
+        when(invoiceRepository.save(any(InvoiceDocument.class))).thenThrow(new DuplicateKeyException("dup"));
+
+        Invoice invoice = invoiceGenerationService.generate(request);
+
+        assertThat(invoice.invoiceId()).isEqualTo("INV-dup");
+        assertThat(invoice.totalAmount()).isEqualByComparingTo("1.00");
     }
 }
