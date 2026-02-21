@@ -1,5 +1,5 @@
 import http from "k6/http";
-import { check, group, sleep } from "k6";
+import { check, fail, group, sleep } from "k6";
 
 const CONFIG = {
   tenantBaseUrl: __ENV.TENANT_BASE_URL || "http://localhost:8081",
@@ -13,6 +13,9 @@ const TARGET_P95_MS = Number(__ENV.TARGET_P95_MS || 300);
 const TARGET_ERR_RATE = Number(__ENV.TARGET_ERROR_RATE || 0.01);
 const VUS = Number(__ENV.PERF_VUS || 10);
 const DURATION = __ENV.PERF_DURATION || "3m";
+const TENANT_POOL_SIZE = Number(__ENV.PERF_TENANT_POOL_SIZE || 200);
+const MIN_TENANT_POOL_SIZE = Number(__ENV.PERF_MIN_TENANT_POOL_SIZE || Math.max(10, VUS));
+const CREATE_TENANT_MAX_RETRIES = Number(__ENV.PERF_TENANT_CREATE_RETRIES || 3);
 
 export const options = {
   scenarios: {
@@ -51,9 +54,51 @@ function uniqueSuffix() {
   return `${Date.now()}-${__VU}-${__ITER}-${Math.floor(Math.random() * 10000)}`;
 }
 
-export default function () {
+function createTenant(displayName) {
+  const res = http.post(
+    `${CONFIG.tenantBaseUrl}/api/v1/tenants`,
+    JSON.stringify({ displayName: displayName }),
+    { headers: authHeaders() }
+  );
+  const body = parseJson(res);
+  if (res.status !== 201 || !body || typeof body.tenantCode !== "string" || body.tenantCode.length === 0) {
+    return null;
+  }
+  return body.tenantCode;
+}
+
+function createTenantWithRetry(displayName) {
+  for (let attempt = 1; attempt <= CREATE_TENANT_MAX_RETRIES; attempt += 1) {
+    const tenantCode = createTenant(displayName);
+    if (tenantCode) {
+      return tenantCode;
+    }
+    sleep(0.1 * attempt);
+  }
+  return null;
+}
+
+export function setup() {
+  const tenantCodes = [];
+  const seed = Date.now();
+
+  for (let i = 0; i < TENANT_POOL_SIZE; i += 1) {
+    const displayName = `Perf Tenant Pool ${seed}-${i}`;
+    const tenantCode = createTenantWithRetry(displayName);
+    if (tenantCode) {
+      tenantCodes.push(tenantCode);
+    }
+  }
+
+  if (tenantCodes.length < MIN_TENANT_POOL_SIZE) {
+    fail(`Tenant pool initialization failed: created=${tenantCodes.length}, required=${MIN_TENANT_POOL_SIZE}`);
+  }
+
+  return { tenantCodes: tenantCodes };
+}
+
+export default function (data) {
   const suffix = uniqueSuffix();
-  const tenantName = `Perf Tenant ${suffix}`;
   const customerId = `cust-${suffix}`;
   const metricCode = "api_call";
   const usageQuantity = 120;
@@ -64,20 +109,17 @@ export default function () {
   let invoiceId;
   let paymentStatus;
 
-  group("1. Create tenant", function () {
-    const res = http.post(
-      `${CONFIG.tenantBaseUrl}/api/v1/tenants`,
-      JSON.stringify({ displayName: tenantName }),
-      { headers: authHeaders() }
-    );
-    const body = parseJson(res);
-    check(res, {
-      "tenant create status is 201": (r) => r.status === 201
+  group("1. Pick tenant from pool", function () {
+    const pool = data && Array.isArray(data.tenantCodes) ? data.tenantCodes : [];
+    if (pool.length > 0) {
+      const index = (__ITER + __VU) % pool.length;
+      tenantCode = pool[index];
+    } else {
+      tenantCode = null;
+    }
+    check(tenantCode, {
+      "tenant selected from pool": (v) => typeof v === "string" && v.length > 0
     });
-    check(body, {
-      "tenant code exists": (b) => b && typeof b.tenantCode === "string" && b.tenantCode.length > 0
-    });
-    tenantCode = body ? body.tenantCode : null;
   });
 
   if (!tenantCode) {

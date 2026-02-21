@@ -68,6 +68,9 @@ services:
         condition: service_healthy
     environment:
       TENANT_MONGODB_URI: mongodb://mongo:27017/billing_tenant
+      PLATFORM_RATE_LIMIT_ENABLED: ${PLATFORM_RATE_LIMIT_ENABLED:-true}
+      PLATFORM_RATE_LIMIT_MAX_REQUESTS: ${PLATFORM_RATE_LIMIT_MAX_REQUESTS:-240}
+      PLATFORM_RATE_LIMIT_WINDOW_SECONDS: ${PLATFORM_RATE_LIMIT_WINDOW_SECONDS:-60}
     ports:
       - "8081:8081"
     restart: unless-stopped

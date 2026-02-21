@@ -27,6 +27,7 @@ import java.net.InetSocketAddress;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -129,9 +130,61 @@ class InvoiceOrchestrationServiceTests {
         assertThat(outboxCaptor.getAllValues()).anyMatch(event -> "ORCHESTRATION_FAILED".equals(event.getEventType()));
     }
 
+    @Test
+    void shouldForwardAuthorizationHeaderToPaymentAndSettlement() throws Exception {
+        AtomicReference<String> paymentAuthorization = new AtomicReference<>();
+        AtomicReference<String> settlementAuthorization = new AtomicReference<>();
+
+        HttpServer paymentServer = startServer("/api/v1/payments/process", 200, """
+                {"transactionId":"TX-2","invoiceId":"INV-2","amount":10.0,"currency":"USD","status":"SUCCESS","providerReference":"APPROVED-2","processedAt":"2026-02-21T00:00:00Z"}
+                """, paymentAuthorization);
+        HttpServer settlementServer = startServer("/api/v1/settlements/start", 200, """
+                {"sagaId":"SAGA-2","tenantId":"tenant-1","invoiceId":"INV-2","paymentTransactionId":"TX-2","amount":10.0,"currency":"USD","status":"SETTLED","transitions":["STARTED","PAYMENT_CONFIRMED","SETTLED"],"updatedAt":"2026-02-21T00:00:00Z"}
+                """, settlementAuthorization);
+        try {
+            InvoiceOrchestrationService service = new InvoiceOrchestrationService(
+                    invoiceGenerationService,
+                    inboxRecordRepository,
+                    orchestrationRecordRepository,
+                    outboxEventRepository,
+                    objectMapper,
+                    "http://localhost:" + paymentServer.getAddress().getPort(),
+                    "http://localhost:" + settlementServer.getAddress().getPort());
+
+            GenerateInvoiceRequest request = new GenerateInvoiceRequest(
+                    "tenant-1", "customer-1", "2026-02", "USD", List.of(new BigDecimal("10.00")), "idem-auth");
+            when(inboxRecordRepository.findByTenantIdAndOperationCodeAndIdempotencyKey(
+                    "tenant-1", "INVOICE_GENERATE_AND_SETTLE", "idem-auth")).thenReturn(Optional.empty());
+            when(inboxRecordRepository.save(any(InboxRecordDocument.class))).thenAnswer(i -> i.getArgument(0));
+            when(orchestrationRecordRepository.findByTenantIdAndOperationCodeAndIdempotencyKey(
+                    "tenant-1", "INVOICE_GENERATE_AND_SETTLE", "idem-auth")).thenReturn(Optional.empty());
+            when(orchestrationRecordRepository.save(any(OrchestrationRecordDocument.class))).thenAnswer(i -> i.getArgument(0));
+            when(outboxEventRepository.save(any(OutboxEventDocument.class))).thenAnswer(i -> i.getArgument(0));
+            when(invoiceGenerationService.generate(any(GenerateInvoiceRequest.class))).thenReturn(
+                    new Invoice("INV-2", "tenant-1", "customer-1", "2026-02",
+                            new BigDecimal("10.00"), "USD", "GENERATED", Instant.now()));
+
+            service.generateAndSettle(request, "Bearer dev-admin-token");
+
+            assertThat(paymentAuthorization.get()).isEqualTo("Bearer dev-admin-token");
+            assertThat(settlementAuthorization.get()).isEqualTo("Bearer dev-admin-token");
+        } finally {
+            paymentServer.stop(0);
+            settlementServer.stop(0);
+        }
+    }
+
     private static HttpServer startServer(String path, int statusCode, String body) throws IOException {
+        return startServer(path, statusCode, body, null);
+    }
+
+    private static HttpServer startServer(String path, int statusCode, String body,
+                                          AtomicReference<String> authorizationRef) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext(path, exchange -> {
+            if (authorizationRef != null) {
+                authorizationRef.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            }
             byte[] bytes = body.trim().getBytes();
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(statusCode, bytes.length);

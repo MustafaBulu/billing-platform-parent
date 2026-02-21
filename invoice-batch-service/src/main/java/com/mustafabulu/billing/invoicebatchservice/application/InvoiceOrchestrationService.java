@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
@@ -63,6 +64,11 @@ public class InvoiceOrchestrationService {
 
     @Transactional
     public InvoiceOrchestrationResult generateAndSettle(GenerateInvoiceRequest request) {
+        return generateAndSettle(request, null);
+    }
+
+    @Transactional
+    public InvoiceOrchestrationResult generateAndSettle(GenerateInvoiceRequest request, String authorizationHeader) {
         String tenantId = request.tenantId();
         String orchestrationIdempotencyKey = buildOrchestrationIdempotencyKey(request);
         String orchestrationId = ensureInbox(tenantId, orchestrationIdempotencyKey);
@@ -70,7 +76,7 @@ public class InvoiceOrchestrationService {
                 tenantId, orchestrationIdempotencyKey, orchestrationId);
 
         if (orchestration.getStatus() == OrchestrationStatus.SETTLEMENT_COMPLETED) {
-            return replayCompletedResult(orchestration, request);
+            return replayCompletedResult(orchestration, request, authorizationHeader);
         }
 
         Invoice invoice = invoiceGenerationService.generate(request);
@@ -84,10 +90,14 @@ public class InvoiceOrchestrationService {
 
         PaymentProcessResponse paymentResponse;
         try {
-            paymentResponse = paymentRestClient.post()
+            RestClient.RequestBodySpec paymentRequest = paymentRestClient.post()
                     .uri("/api/v1/payments/process")
                     .header(TenantContextFilter.TENANT_HEADER, tenantId)
-                    .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestrationIdempotencyKey)
+                    .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestrationIdempotencyKey);
+            if (hasText(authorizationHeader)) {
+                paymentRequest.header(HttpHeaders.AUTHORIZATION, authorizationHeader);
+            }
+            paymentResponse = paymentRequest
                     .body(new PaymentProcessRequest(
                             tenantId,
                             invoice.invoiceId(),
@@ -116,10 +126,14 @@ public class InvoiceOrchestrationService {
 
         SettlementResponse settlementResponse;
         try {
-            settlementResponse = settlementRestClient.post()
+            RestClient.RequestBodySpec settlementRequest = settlementRestClient.post()
                     .uri("/api/v1/settlements/start")
                     .header(TenantContextFilter.TENANT_HEADER, tenantId)
-                    .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestrationIdempotencyKey)
+                    .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestrationIdempotencyKey);
+            if (hasText(authorizationHeader)) {
+                settlementRequest.header(HttpHeaders.AUTHORIZATION, authorizationHeader);
+            }
+            settlementResponse = settlementRequest
                     .body(new StartSettlementRequest(
                             tenantId,
                             invoice.invoiceId(),
@@ -256,16 +270,21 @@ public class InvoiceOrchestrationService {
     }
 
     private InvoiceOrchestrationResult replayCompletedResult(OrchestrationRecordDocument orchestration,
-                                                             GenerateInvoiceRequest request) {
+                                                             GenerateInvoiceRequest request,
+                                                             String authorizationHeader) {
         Invoice invoice = invoiceGenerationService.findById(orchestration.getInvoiceId());
         if (invoice == null) {
             invoice = invoiceGenerationService.generate(request);
         }
 
-        PaymentProcessResponse payment = paymentRestClient.post()
+        RestClient.RequestBodySpec paymentRequest = paymentRestClient.post()
                 .uri("/api/v1/payments/process")
                 .header(TenantContextFilter.TENANT_HEADER, request.tenantId())
-                .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestration.getIdempotencyKey())
+                .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestration.getIdempotencyKey());
+        if (hasText(authorizationHeader)) {
+            paymentRequest.header(HttpHeaders.AUTHORIZATION, authorizationHeader);
+        }
+        PaymentProcessResponse payment = paymentRequest
                 .body(new PaymentProcessRequest(
                         request.tenantId(),
                         invoice.invoiceId(),
@@ -275,10 +294,14 @@ public class InvoiceOrchestrationService {
                 .retrieve()
                 .body(PaymentProcessResponse.class);
 
-        SettlementResponse settlement = settlementRestClient.post()
+        RestClient.RequestBodySpec settlementRequest = settlementRestClient.post()
                 .uri("/api/v1/settlements/start")
                 .header(TenantContextFilter.TENANT_HEADER, request.tenantId())
-                .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestration.getIdempotencyKey())
+                .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestration.getIdempotencyKey());
+        if (hasText(authorizationHeader)) {
+            settlementRequest.header(HttpHeaders.AUTHORIZATION, authorizationHeader);
+        }
+        SettlementResponse settlement = settlementRequest
                 .body(new StartSettlementRequest(
                         request.tenantId(),
                         invoice.invoiceId(),
@@ -301,5 +324,9 @@ public class InvoiceOrchestrationService {
         String rawKey = request.tenantId() + "|" + request.customerId() + "|" + request.billingPeriod()
                 + "|" + request.currency() + "|" + request.lineAmounts();
         return "invoice-orchestration-" + UUID.nameUUIDFromBytes(rawKey.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

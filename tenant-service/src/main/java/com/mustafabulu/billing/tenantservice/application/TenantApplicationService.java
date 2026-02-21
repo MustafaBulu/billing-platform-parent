@@ -9,7 +9,6 @@ import java.time.Instant;
 import java.util.Locale;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TenantApplicationService {
@@ -19,14 +18,10 @@ public class TenantApplicationService {
         this.tenantRepository = tenantRepository;
     }
 
-    @Transactional
     public Tenant create(CreateTenantRequest request) {
         String baseCode = toTenantCodeBase(request.displayName());
         for (int attempt = 1; attempt <= 100; attempt++) {
             String candidateCode = attempt == 1 ? baseCode : baseCode + "-" + attempt;
-            if (tenantRepository.findByTenantCode(candidateCode).isPresent()) {
-                continue;
-            }
             TenantDocument document = new TenantDocument();
             document.setTenantCode(candidateCode);
             document.setDisplayName(request.displayName());
