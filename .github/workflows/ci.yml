@@ -31,6 +31,9 @@ jobs:
           java-version: "21"
           cache: maven
 
+      - name: Ensure Maven wrapper is executable
+        run: chmod +x mvnw
+
       - name: Run Maven verify (unit + integration + e2e in test phase)
         run: ./mvnw -B -ntp clean verify
 
