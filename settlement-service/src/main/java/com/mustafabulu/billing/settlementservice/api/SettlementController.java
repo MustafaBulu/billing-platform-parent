@@ -31,7 +31,7 @@ public class SettlementController {
     }
 
     @GetMapping("/{sagaId}")
-    public SettlementSaga getById(@PathVariable String sagaId) {
+    public SettlementSaga getById(@PathVariable("sagaId") String sagaId) {
         SettlementSaga saga = settlementSagaService.getById(sagaId);
         if (saga == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Settlement saga not found: " + sagaId);

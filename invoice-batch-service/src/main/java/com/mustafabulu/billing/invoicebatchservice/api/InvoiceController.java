@@ -36,7 +36,7 @@ public class InvoiceController {
     }
 
     @GetMapping("/{invoiceId}")
-    public Invoice getById(@PathVariable String invoiceId) {
+    public Invoice getById(@PathVariable("invoiceId") String invoiceId) {
         Invoice invoice = invoiceGenerationService.findById(invoiceId);
         if (invoice == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found: " + invoiceId);
