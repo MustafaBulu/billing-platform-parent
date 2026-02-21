@@ -3,7 +3,7 @@ package com.mustafabulu.billing.tenantservice;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "com.mustafabulu.billing")
 public class TenantServiceApplication {
 
     public static void main(String[] args) {

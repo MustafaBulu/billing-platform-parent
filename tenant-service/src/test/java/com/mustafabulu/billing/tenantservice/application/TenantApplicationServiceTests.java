@@ -20,46 +20,57 @@ class TenantApplicationServiceTests {
     private final TenantApplicationService tenantApplicationService = new TenantApplicationService(tenantRepository);
 
     @Test
-    void shouldReturnExistingTenantWhenTenantCodeAlreadyExists() {
-        CreateTenantRequest request = new CreateTenantRequest("tenant-a", "Tenant A");
-        TenantDocument existing = document("id-1", "tenant-a", "Tenant A");
-        when(tenantRepository.findByTenantCode("tenant-a")).thenReturn(Optional.of(existing));
-
-        Tenant tenant = tenantApplicationService.create(request);
-
-        assertThat(tenant.id()).isEqualTo("id-1");
-        assertThat(tenant.tenantCode()).isEqualTo("tenant-a");
-    }
-
-    @Test
-    void shouldCreateTenantWhenNotExists() {
-        CreateTenantRequest request = new CreateTenantRequest("tenant-b", "Tenant B");
-        when(tenantRepository.findByTenantCode("tenant-b")).thenReturn(Optional.empty());
+    void shouldCreateTenantWithGeneratedCode() {
+        CreateTenantRequest request = new CreateTenantRequest("Tenant A");
+        when(tenantRepository.findByTenantCode("tenant-a")).thenReturn(Optional.empty());
         when(tenantRepository.save(any(TenantDocument.class))).thenAnswer(i -> {
             TenantDocument saved = i.getArgument(0);
-            saved.setId("id-2");
+            saved.setId("id-1");
             return saved;
         });
 
         Tenant tenant = tenantApplicationService.create(request);
 
-        assertThat(tenant.id()).isEqualTo("id-2");
-        assertThat(tenant.displayName()).isEqualTo("Tenant B");
+        assertThat(tenant.id()).isEqualTo("id-1");
+        assertThat(tenant.tenantCode()).isEqualTo("tenant-a");
+        assertThat(tenant.displayName()).isEqualTo("Tenant A");
     }
 
     @Test
-    void shouldFallbackToExistingTenantOnDuplicateSave() {
-        CreateTenantRequest request = new CreateTenantRequest("tenant-c", "Tenant C");
-        TenantDocument existing = document("id-3", "tenant-c", "Tenant C");
-        when(tenantRepository.findByTenantCode("tenant-c"))
-                .thenReturn(Optional.empty())
-                .thenReturn(Optional.of(existing));
-        when(tenantRepository.save(any(TenantDocument.class))).thenThrow(new DuplicateKeyException("dup"));
+    void shouldGenerateNextCodeWhenBaseCodeExists() {
+        CreateTenantRequest request = new CreateTenantRequest("Tenant Dup");
+        TenantDocument existing = document("id-3", "tenant-dup", "Tenant Dup");
+        when(tenantRepository.findByTenantCode("tenant-dup")).thenReturn(Optional.of(existing));
+        when(tenantRepository.findByTenantCode("tenant-dup-2")).thenReturn(Optional.empty());
+        when(tenantRepository.save(any(TenantDocument.class))).thenAnswer(i -> {
+            TenantDocument saved = i.getArgument(0);
+            saved.setId("id-4");
+            return saved;
+        });
+
+        Tenant tenant = tenantApplicationService.create(request);
+
+        assertThat(tenant.id()).isEqualTo("id-4");
+        assertThat(tenant.tenantCode()).isEqualTo("tenant-dup-2");
+    }
+
+    @Test
+    void shouldRetryWhenDuplicateKeyOccursDuringSave() {
+        CreateTenantRequest request = new CreateTenantRequest("Tenant C");
+        when(tenantRepository.findByTenantCode("tenant-c")).thenReturn(Optional.empty());
+        when(tenantRepository.findByTenantCode("tenant-c-2")).thenReturn(Optional.empty());
+        when(tenantRepository.save(any(TenantDocument.class)))
+                .thenThrow(new DuplicateKeyException("dup"))
+                .thenAnswer(i -> {
+                    TenantDocument saved = i.getArgument(0);
+                    saved.setId("id-3");
+                    return saved;
+                });
 
         Tenant tenant = tenantApplicationService.create(request);
 
         assertThat(tenant.id()).isEqualTo("id-3");
-        assertThat(tenant.tenantCode()).isEqualTo("tenant-c");
+        assertThat(tenant.tenantCode()).isEqualTo("tenant-c-2");
     }
 
     private static TenantDocument document(String id, String code, String name) {

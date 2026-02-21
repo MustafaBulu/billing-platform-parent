@@ -3,7 +3,7 @@ package com.mustafabulu.billing.usageservice;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "com.mustafabulu.billing")
 public class UsageServiceApplication {
 
     public static void main(String[] args) {

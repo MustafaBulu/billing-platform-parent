@@ -40,7 +40,6 @@ class TenantE2ETests {
     void shouldCreateTenantAndPersist() {
         String payload = """
                 {
-                  "tenantCode": "tenant-e2e",
                   "displayName": "Tenant E2E"
                 }
                 """;
@@ -63,17 +62,15 @@ class TenantE2ETests {
     }
 
     @Test
-    void shouldReturnExistingTenantForSameTenantCode() {
+    void shouldGenerateUniqueTenantCodeForSameDisplayName() {
         String firstPayload = """
                 {
-                  "tenantCode": "tenant-dup",
-                  "displayName": "Tenant First"
+                  "displayName": "Tenant Dup"
                 }
                 """;
         String secondPayload = """
                 {
-                  "tenantCode": "tenant-dup",
-                  "displayName": "Tenant Second"
+                  "displayName": "Tenant Dup"
                 }
                 """;
 
@@ -101,10 +98,12 @@ class TenantE2ETests {
                 .extract()
                 .path("id");
 
-        assertThat(secondId).isEqualTo(firstId);
-        assertThat(tenantRepository.count()).isEqualTo(1L);
+        assertThat(secondId).isNotEqualTo(firstId);
+        assertThat(tenantRepository.count()).isEqualTo(2L);
 
-        TenantDocument tenant = tenantRepository.findAll().getFirst();
-        assertThat(tenant.getDisplayName()).isEqualTo("Tenant First");
+        TenantDocument first = tenantRepository.findByTenantCode("tenant-dup").orElseThrow();
+        TenantDocument second = tenantRepository.findByTenantCode("tenant-dup-2").orElseThrow();
+        assertThat(first.getDisplayName()).isEqualTo("Tenant Dup");
+        assertThat(second.getDisplayName()).isEqualTo("Tenant Dup");
     }
 }

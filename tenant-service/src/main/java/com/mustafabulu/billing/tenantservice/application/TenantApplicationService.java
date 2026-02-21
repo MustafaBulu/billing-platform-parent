@@ -5,6 +5,7 @@ import com.mustafabulu.billing.tenantservice.domain.Tenant;
 import com.mustafabulu.billing.tenantservice.persistence.TenantDocument;
 import com.mustafabulu.billing.tenantservice.persistence.TenantRepository;
 import java.time.Instant;
+import java.util.Locale;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
@@ -17,24 +18,32 @@ public class TenantApplicationService {
     }
 
     public Tenant create(CreateTenantRequest request) {
-        return tenantRepository.findByTenantCode(request.tenantCode())
-                .map(this::toDomain)
-                .orElseGet(() -> saveNewTenant(request));
+        String baseCode = toTenantCodeBase(request.displayName());
+        for (int attempt = 1; attempt <= 100; attempt++) {
+            String candidateCode = attempt == 1 ? baseCode : baseCode + "-" + attempt;
+            if (tenantRepository.findByTenantCode(candidateCode).isPresent()) {
+                continue;
+            }
+            TenantDocument document = new TenantDocument();
+            document.setTenantCode(candidateCode);
+            document.setDisplayName(request.displayName());
+            document.setCreatedAt(Instant.now());
+            try {
+                return toDomain(tenantRepository.save(document));
+            } catch (DuplicateKeyException ignored) {
+                // concurrent insert with same generated code, continue with next suffix
+            }
+        }
+        throw new IllegalStateException("Unable to generate unique tenant code for: " + request.displayName());
     }
 
-    private Tenant saveNewTenant(CreateTenantRequest request) {
-        TenantDocument document = new TenantDocument();
-        document.setTenantCode(request.tenantCode());
-        document.setDisplayName(request.displayName());
-        document.setCreatedAt(Instant.now());
-
-        try {
-            return toDomain(tenantRepository.save(document));
-        } catch (DuplicateKeyException duplicateKeyException) {
-            return tenantRepository.findByTenantCode(request.tenantCode())
-                    .map(this::toDomain)
-                    .orElseThrow(() -> duplicateKeyException);
-        }
+    private String toTenantCodeBase(String displayName) {
+        String normalized = displayName.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-+", "")
+                .replaceAll("-+$", "")
+                .replaceAll("-{2,}", "-");
+        return normalized.isBlank() ? "tenant" : normalized;
     }
 
     private Tenant toDomain(TenantDocument document) {

@@ -53,6 +53,26 @@ docker compose -f docker-compose.local.yml up -d
 - Payment: `http://localhost:8085`
 - Settlement: `http://localhost:8086`
 
+### OpenAPI / Swagger
+- OpenAPI JSON: `http://localhost:<port>/v3/api-docs`
+- Swagger UI: `http://localhost:<port>/swagger-ui/index.html`
+
+### Security & Observability Toggles
+Common defaults are added to each service `application.properties`:
+- `platform.security.api-key.enabled=false`
+- `platform.security.api-key.value=change-me`
+- `platform.security.tenant-guard.enabled=false`
+
+If `platform.security.api-key.enabled=true`, send:
+- Header: `X-API-Key: <your-key>`
+
+If `platform.security.tenant-guard.enabled=true`, send:
+- Header: `X-Tenant-Id: <tenant-id>`
+
+Request correlation:
+- Request header (optional): `X-Request-Id`
+- Response header (always): `X-Request-Id`
+
 ## Next Iterations
 - Add MongoDB + Oracle persistence adapters
 - Introduce outbox/inbox and saga state store
