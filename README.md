@@ -184,7 +184,12 @@ Notes:
 ### CI/CD (GitHub Actions)
 - CI workflow: `.github/workflows/ci.yml`
   - Trigger: push + pull request
+  - Runs Gitleaks secret scan on repository history
   - Runs: `./mvnw -B -ntp clean verify`
+  - Runs SonarQube analysis when secrets exist (optional):
+    - `SONAR_HOST_URL`
+    - `SONAR_TOKEN`
+    - `SONAR_PROJECT_KEY` (optional, defaults to `<owner>_<repo>`)
   - Uploads surefire/failsafe test reports as artifacts
 - CD workflow: `.github/workflows/cd.yml`
   - Trigger: CI success on `main` or manual dispatch on `main`

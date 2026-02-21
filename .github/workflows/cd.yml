@@ -45,6 +45,19 @@ jobs:
         with:
           ref: ${{ steps.vars.outputs.sha }}
 
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Ensure Maven wrapper is executable
+        run: chmod +x mvnw
+
+      - name: Build jar for ${{ matrix.service }}
+        run: ./mvnw -B -ntp -pl ${{ matrix.service }} -am clean package -DskipTests
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

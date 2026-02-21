@@ -17,6 +17,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -46,6 +60,27 @@ jobs:
 
       - name: Run Maven verify (unit + integration + e2e in test phase)
         run: ./mvnw -B -ntp clean verify
+
+      - name: Run SonarQube analysis
+        if: ${{ secrets.SONAR_TOKEN != '' && secrets.SONAR_HOST_URL != '' }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+        run: |
+          PROJECT_KEY="$SONAR_PROJECT_KEY"
+          if [ -z "$PROJECT_KEY" ]; then
+            PROJECT_KEY="${GITHUB_REPOSITORY/\//_}"
+          fi
+          ./mvnw -B -ntp sonar:sonar \
+            -Dsonar.host.url="$SONAR_HOST_URL" \
+            -Dsonar.token="$SONAR_TOKEN" \
+            -Dsonar.projectKey="$PROJECT_KEY" \
+            -Dsonar.projectName="${GITHUB_REPOSITORY}"
+
+      - name: SonarQube skipped (missing secrets)
+        if: ${{ secrets.SONAR_TOKEN == '' || secrets.SONAR_HOST_URL == '' }}
+        run: echo "Skipping SonarQube analysis because SONAR_TOKEN or SONAR_HOST_URL is not configured."
 
       - name: Upload Surefire reports
         if: always()
