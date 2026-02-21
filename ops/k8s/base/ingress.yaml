@@ -1,0 +1,67 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: billing-platform-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: tenant.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tenant-service
+                port:
+                  number: 8081
+    - host: usage.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: usage-service
+                port:
+                  number: 8082
+    - host: billing.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: billing-service
+                port:
+                  number: 8083
+    - host: invoice.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: invoice-batch-service
+                port:
+                  number: 8084
+    - host: payment.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: payment-service
+                port:
+                  number: 8085
+    - host: settlement.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: settlement-service
+                port:
+                  number: 8086

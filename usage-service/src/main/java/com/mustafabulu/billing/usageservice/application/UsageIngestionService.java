@@ -13,6 +13,7 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UsageIngestionService {
@@ -28,6 +29,7 @@ public class UsageIngestionService {
         this.mongoTemplate = mongoTemplate;
     }
 
+    @Transactional
     public UsageEvent ingest(UsageEventRequest request) {
         UsageEventDocument existing = usageEventRepository.findByTenantIdAndIdempotencyKey(
                         request.tenantId(), request.idempotencyKey())
@@ -58,6 +60,7 @@ public class UsageIngestionService {
         return toDomain(persisted);
     }
 
+    @Transactional(readOnly = true)
     public long currentTotal(String tenantId, String customerId, String metricCode) {
         return usageAggregateRepository.findByTenantIdAndCustomerIdAndMetricCode(tenantId, customerId, metricCode)
                 .map(UsageAggregateDocument::getTotalQuantity)

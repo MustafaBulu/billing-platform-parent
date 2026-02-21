@@ -9,7 +9,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.core.Ordered;
@@ -36,6 +38,15 @@ public class ApiSecurityFilter extends OncePerRequestFilter {
     @Value("${platform.security.bearer.tokens:}")
     private String bearerTokens;
 
+    @Value("${platform.security.bearer.token-scopes:}")
+    private String bearerTokenScopes;
+
+    @Value("${platform.security.bearer.token-tenants:}")
+    private String bearerTokenTenants;
+
+    @Value("${platform.security.authorization.enabled:false}")
+    private boolean authorizationEnabled;
+
     @Value("${platform.security.tenant-guard.enabled:false}")
     private boolean tenantGuardEnabled;
 
@@ -53,55 +64,181 @@ public class ApiSecurityFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (!authorize(request, response)) {
+        AuthContext authContext = authorize(request, response);
+        if (authContext == null) {
             return;
         }
 
-        if (tenantGuardEnabled && path.startsWith("/api/v1/")) {
-            String tenantHeader = request.getHeader(TenantContextFilter.TENANT_HEADER);
-            if (tenantHeader == null || tenantHeader.isBlank()) {
-                writeError(response, request, HttpStatus.BAD_REQUEST, "TENANT_HEADER_REQUIRED",
-                        "X-Tenant-Id header is required");
-                return;
-            }
+        String tenantHeader = normalizedHeaderValue(request, TenantContextFilter.TENANT_HEADER);
+        if (tenantGuardEnabled && requiresTenant(path) && tenantHeader == null) {
+            writeError(response, request, HttpStatus.BAD_REQUEST, "TENANT_HEADER_REQUIRED",
+                    "X-Tenant-Id header is required");
+            return;
+        }
+
+        if (!authorizeRequest(request, response, path, tenantHeader, authContext)) {
+            return;
         }
 
         filterChain.doFilter(request, response);
     }
 
-    private boolean authorize(HttpServletRequest request, HttpServletResponse response) throws IOException {
+    private AuthContext authorize(HttpServletRequest request, HttpServletResponse response) throws IOException {
         String mode = authMode == null ? "none" : authMode.trim().toLowerCase();
         switch (mode) {
             case "none":
-                return true;
+                return new AuthContext(mode, Set.of(), Set.of());
             case "api-key":
-                String apiKey = request.getHeader("X-API-Key");
-                if (apiKey == null || apiKey.isBlank() || !apiKey.equals(expectedApiKey)) {
+                String apiKey = normalizedHeaderValue(request, "X-API-Key");
+                if (apiKey == null || !apiKey.equals(expectedApiKey)) {
                     writeError(response, request, HttpStatus.UNAUTHORIZED, "AUTH_INVALID_API_KEY",
                             "Missing or invalid API key");
-                    return false;
+                    return null;
                 }
-                return true;
+                return new AuthContext(mode, Set.of("*"), Set.of("*"));
             case "bearer":
-                String authorization = request.getHeader("Authorization");
+                String authorization = normalizedHeaderValue(request, "Authorization");
                 if (authorization == null || !authorization.startsWith("Bearer ")) {
                     writeError(response, request, HttpStatus.UNAUTHORIZED, "AUTH_BEARER_REQUIRED",
                             "Missing bearer token");
-                    return false;
+                    return null;
                 }
                 String token = authorization.substring("Bearer ".length()).trim();
                 Set<String> allowedTokens = parseAllowedTokens();
                 if (allowedTokens.isEmpty() || !allowedTokens.contains(token)) {
                     writeError(response, request, HttpStatus.UNAUTHORIZED, "AUTH_INVALID_BEARER",
                             "Invalid bearer token");
-                    return false;
+                    return null;
                 }
-                return true;
+                Map<String, Set<String>> scopedTokens = parseTokenMappings(bearerTokenScopes);
+                Map<String, Set<String>> tenantBoundTokens = parseTokenMappings(bearerTokenTenants);
+                Set<String> scopes = scopedTokens.getOrDefault(token, Set.of());
+                Set<String> allowedTenants = tenantBoundTokens.getOrDefault(token, Set.of("*"));
+                return new AuthContext(mode, scopes, allowedTenants);
             default:
                 writeError(response, request, HttpStatus.INTERNAL_SERVER_ERROR, "AUTH_MODE_INVALID",
                         "Unsupported auth mode: " + authMode);
-                return false;
+                return null;
         }
+    }
+
+    private boolean authorizeRequest(HttpServletRequest request,
+                                     HttpServletResponse response,
+                                     String path,
+                                     String tenantHeader,
+                                     AuthContext authContext) throws IOException {
+        if (!authorizationEnabled || !path.startsWith("/api/v1/")) {
+            return true;
+        }
+
+        if ("none".equals(authContext.mode())) {
+            writeError(response, request, HttpStatus.INTERNAL_SERVER_ERROR, "AUTHZ_REQUIRES_AUTH",
+                    "Authorization requires auth mode api-key or bearer");
+            return false;
+        }
+
+        if (!hasRequiredScope(authContext, request.getMethod(), path)) {
+            writeError(response, request, HttpStatus.FORBIDDEN, "AUTHZ_SCOPE_FORBIDDEN",
+                    "Missing required scope for endpoint");
+            return false;
+        }
+
+        if (tenantHeader != null
+                && !authContext.allowedTenants().contains("*")
+                && !authContext.allowedTenants().contains(tenantHeader)) {
+            writeError(response, request, HttpStatus.FORBIDDEN, "AUTHZ_TENANT_FORBIDDEN",
+                    "Token is not allowed for requested tenant");
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean hasRequiredScope(AuthContext authContext, String method, String path) {
+        if (authContext.scopes().contains("*")) {
+            return true;
+        }
+        Set<String> requiredScopes = resolveRequiredScopes(method, path);
+        if (requiredScopes.isEmpty()) {
+            return true;
+        }
+        return authContext.scopes().containsAll(requiredScopes);
+    }
+
+    private Set<String> resolveRequiredScopes(String method, String path) {
+        if ("POST".equalsIgnoreCase(method) && "/api/v1/tenants".equals(path)) {
+            return Set.of("tenant:write");
+        }
+        if ("POST".equalsIgnoreCase(method) && "/api/v1/usage/events".equals(path)) {
+            return Set.of("usage:write");
+        }
+        if ("GET".equalsIgnoreCase(method) && path.startsWith("/api/v1/usage/totals/")) {
+            return Set.of("usage:read");
+        }
+        if ("POST".equalsIgnoreCase(method) && "/api/v1/billing/rate".equals(path)) {
+            return Set.of("billing:write");
+        }
+        if ("POST".equalsIgnoreCase(method) && "/api/v1/invoices/generate".equals(path)) {
+            return Set.of("invoice:write");
+        }
+        if ("POST".equalsIgnoreCase(method) && "/api/v1/invoices/generate-and-settle".equals(path)) {
+            return Set.of("invoice:settle");
+        }
+        if ("GET".equalsIgnoreCase(method) && path.startsWith("/api/v1/invoices/")) {
+            return Set.of("invoice:read");
+        }
+        if ("POST".equalsIgnoreCase(method) && "/api/v1/payments/process".equals(path)) {
+            return Set.of("payment:write");
+        }
+        if ("POST".equalsIgnoreCase(method) && "/api/v1/settlements/start".equals(path)) {
+            return Set.of("settlement:write");
+        }
+        if ("GET".equalsIgnoreCase(method) && path.startsWith("/api/v1/settlements/")) {
+            return Set.of("settlement:read");
+        }
+        return Set.of();
+    }
+
+    private boolean requiresTenant(String path) {
+        return path.startsWith("/api/v1/")
+                && !path.startsWith("/api/v1/system")
+                && !"/api/v1/tenants".equals(path);
+    }
+
+    private String normalizedHeaderValue(HttpServletRequest request, String headerName) {
+        String raw = request.getHeader(headerName);
+        if (raw == null) {
+            return null;
+        }
+        String normalized = raw.trim();
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private Map<String, Set<String>> parseTokenMappings(String rawMappings) {
+        if (rawMappings == null || rawMappings.isBlank()) {
+            return Map.of();
+        }
+
+        Map<String, Set<String>> mappedValues = new HashMap<>();
+        Arrays.stream(rawMappings.split(";"))
+                .map(String::trim)
+                .filter(entry -> !entry.isBlank())
+                .forEach(entry -> {
+                    String[] keyValue = entry.split("=", 2);
+                    if (keyValue.length != 2) {
+                        return;
+                    }
+                    String token = keyValue[0].trim();
+                    if (token.isBlank()) {
+                        return;
+                    }
+                    Set<String> values = Arrays.stream(keyValue[1].split("\\|"))
+                            .map(String::trim)
+                            .filter(value -> !value.isBlank())
+                            .collect(LinkedHashSet::new, Set::add, Set::addAll);
+                    mappedValues.put(token, values);
+                });
+        return mappedValues;
     }
 
     private Set<String> parseAllowedTokens() {
@@ -146,5 +283,8 @@ public class ApiSecurityFilter extends OncePerRequestFilter {
     private String getRequestId(HttpServletRequest request) {
         Object requestId = request.getAttribute(RequestCorrelationFilter.REQUEST_ID_ATTR);
         return requestId == null ? null : requestId.toString();
+    }
+
+    private record AuthContext(String mode, Set<String> scopes, Set<String> allowedTenants) {
     }
 }

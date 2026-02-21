@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PaymentApplicationService {
@@ -25,6 +26,7 @@ public class PaymentApplicationService {
         this.paymentRecordRepository = paymentRecordRepository;
     }
 
+    @Transactional
     public PaymentResult process(ProcessPaymentRequest request) {
         String effectiveTenantId = TenantContextHolder.getTenantId().orElse(request.tenantId());
         String effectiveKey = IdempotencyKeyResolver.resolveCompositeKey(OPERATION_CODE)

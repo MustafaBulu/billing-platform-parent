@@ -2,6 +2,7 @@ package com.mustafabulu.billing.invoicebatchservice.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mustafabulu.billing.common.exception.UpstreamServiceException;
 import com.mustafabulu.billing.common.idempotency.IdempotencyHeaders;
 import com.mustafabulu.billing.common.tenant.TenantContextFilter;
 import com.mustafabulu.billing.invoicebatchservice.api.dto.GenerateInvoiceRequest;
@@ -25,6 +26,7 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -59,6 +61,7 @@ public class InvoiceOrchestrationService {
         this.settlementRestClient = RestClient.builder().baseUrl(settlementBaseUrl).build();
     }
 
+    @Transactional
     public InvoiceOrchestrationResult generateAndSettle(GenerateInvoiceRequest request) {
         String tenantId = request.tenantId();
         String orchestrationIdempotencyKey = buildOrchestrationIdempotencyKey(request);
@@ -100,7 +103,7 @@ public class InvoiceOrchestrationService {
 
         if (paymentResponse == null) {
             markFailed(orchestration, "PAYMENT_EMPTY_RESPONSE");
-            throw new IllegalStateException("Payment response is empty");
+            throw new UpstreamServiceException("Payment response is empty");
         }
 
         orchestration.setPaymentTransactionId(paymentResponse.transactionId());
@@ -134,7 +137,7 @@ public class InvoiceOrchestrationService {
 
         if (settlementResponse == null) {
             markFailed(orchestration, "SETTLEMENT_EMPTY_RESPONSE");
-            throw new IllegalStateException("Settlement response is empty");
+            throw new UpstreamServiceException("Settlement response is empty");
         }
 
         orchestration.setSettlementSagaId(settlementResponse.sagaId());

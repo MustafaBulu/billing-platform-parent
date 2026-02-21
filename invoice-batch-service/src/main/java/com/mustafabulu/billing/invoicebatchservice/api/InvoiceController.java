@@ -1,5 +1,6 @@
 package com.mustafabulu.billing.invoicebatchservice.api;
 
+import com.mustafabulu.billing.common.exception.ResourceNotFoundException;
 import com.mustafabulu.billing.common.web.ApiErrorResponse;
 import com.mustafabulu.billing.invoicebatchservice.api.dto.GenerateInvoiceRequest;
 import com.mustafabulu.billing.invoicebatchservice.application.InvoiceGenerationService;
@@ -22,7 +23,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1/invoices")
@@ -94,7 +94,7 @@ public class InvoiceController {
     public Invoice getById(@PathVariable("invoiceId") String invoiceId) {
         Invoice invoice = invoiceGenerationService.findById(invoiceId);
         if (invoice == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found: " + invoiceId);
+            throw new ResourceNotFoundException("Invoice not found: " + invoiceId);
         }
         return invoice;
     }

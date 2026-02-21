@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SettlementSagaService {
@@ -25,6 +26,7 @@ public class SettlementSagaService {
         this.settlementSagaRepository = settlementSagaRepository;
     }
 
+    @Transactional
     public SettlementSaga start(StartSettlementRequest request) {
         String effectiveTenantId = TenantContextHolder.getTenantId().orElse(request.tenantId());
         String effectiveKey = IdempotencyKeyResolver.resolveCompositeKey(OPERATION_CODE)
@@ -73,6 +75,7 @@ public class SettlementSagaService {
         }
     }
 
+    @Transactional(readOnly = true)
     public SettlementSaga getById(String sagaId) {
         return settlementSagaRepository.findBySagaId(sagaId)
                 .map(this::toDomain)

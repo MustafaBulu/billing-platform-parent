@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: billing-platform-config
+data:
+  PLATFORM_SECURITY_AUTH_MODE: "bearer"
+  PLATFORM_SECURITY_AUTHORIZATION_ENABLED: "true"
+  PLATFORM_SECURITY_TENANT_GUARD_ENABLED: "true"
+  PLATFORM_RATE_LIMIT_ENABLED: "true"
+  PLATFORM_RATE_LIMIT_MAX_REQUESTS: "240"
+  PLATFORM_RATE_LIMIT_WINDOW_SECONDS: "60"
+  TENANT_MONGODB_URI: "mongodb://mongo:27017/billing_tenant"
+  USAGE_MONGODB_URI: "mongodb://mongo:27017/billing_usage"
+  INVOICE_MONGODB_URI: "mongodb://mongo:27017/billing_invoice"
+  PAYMENT_MONGODB_URI: "mongodb://mongo:27017/billing_payment"
+  SETTLEMENT_MONGODB_URI: "mongodb://mongo:27017/billing_settlement"
+  INTEGRATION_PAYMENT_BASE_URL: "http://payment-service:8085"
+  INTEGRATION_SETTLEMENT_BASE_URL: "http://settlement-service:8086"

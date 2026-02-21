@@ -1,0 +1,80 @@
+name: Performance Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 1 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  k6-perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start platform stack
+        run: docker compose -f docker-compose.local.yml up -d --build
+
+      - name: Wait for services readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          for port in 8081 8082 8083 8084 8085 8086; do
+            echo "Waiting for service on port ${port}..."
+            for i in {1..60}; do
+              if curl -fsS "http://localhost:${port}/actuator/health/readiness" > /dev/null; then
+                echo "Port ${port} is ready."
+                break
+              fi
+              sleep 2
+              if [[ "$i" -eq 60 ]]; then
+                echo "Service on port ${port} did not become ready in time."
+                exit 1
+              fi
+            done
+          done
+
+      - name: Run k6 performance flow
+        env:
+          PERF_AUTH_TOKEN: dev-admin-token
+          TARGET_P95_MS: "300"
+          TARGET_ERROR_RATE: "0.01"
+          PERF_VUS: "10"
+          PERF_DURATION: "3m"
+        run: |
+          mkdir -p perf/results
+          docker run --rm \
+            --network host \
+            -v "$PWD:/work" \
+            -w /work \
+            -e PERF_AUTH_TOKEN \
+            -e TARGET_P95_MS \
+            -e TARGET_ERROR_RATE \
+            -e PERF_VUS \
+            -e PERF_DURATION \
+            grafana/k6:0.52.0 \
+            run \
+            --summary-export /work/perf/results/k6-summary.json \
+            /work/perf/k6/scenarios/platform-flow.js
+
+      - name: Export container logs
+        if: always()
+        run: |
+          mkdir -p perf/results
+          docker compose -f docker-compose.local.yml logs --no-color > perf/results/docker-compose.log
+
+      - name: Upload performance artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: perf/results/
+          if-no-files-found: warn
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f docker-compose.local.yml down -v

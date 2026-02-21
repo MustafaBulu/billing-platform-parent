@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class InvoiceGenerationService {
@@ -25,6 +26,7 @@ public class InvoiceGenerationService {
         this.invoiceRepository = invoiceRepository;
     }
 
+    @Transactional
     public Invoice generate(GenerateInvoiceRequest request) {
         String effectiveTenantId = TenantContextHolder.getTenantId().orElse(request.tenantId());
         String effectiveKey = IdempotencyKeyResolver.resolveCompositeKey(OPERATION_CODE)
@@ -63,6 +65,7 @@ public class InvoiceGenerationService {
         }
     }
 
+    @Transactional(readOnly = true)
     public Invoice findById(String invoiceId) {
         return invoiceRepository.findByInvoiceId(invoiceId)
                 .map(this::toDomain)

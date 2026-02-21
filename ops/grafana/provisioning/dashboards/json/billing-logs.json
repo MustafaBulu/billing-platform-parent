@@ -1,0 +1,61 @@
+{
+  "id": null,
+  "uid": "billing-logs",
+  "title": "Billing Platform - Logs",
+  "tags": ["billing", "logs", "loki"],
+  "timezone": "",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "logs",
+      "title": "Application Logs",
+      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 0 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{compose_project=\"billing-platform-parent\",service=~\".*service|mongo|loki|promtail|prometheus|grafana\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": true,
+        "wrapLogMessage": false,
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Error Logs Rate by Service",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 14 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (service) (rate({compose_project=\"billing-platform-parent\"} |= \"ERROR\" [5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Warn Logs Rate by Service",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 14 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (service) (rate({compose_project=\"billing-platform-parent\"} |= \"WARN\" [5m]))",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

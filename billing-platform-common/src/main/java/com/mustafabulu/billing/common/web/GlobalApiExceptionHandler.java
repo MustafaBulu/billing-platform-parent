@@ -1,7 +1,13 @@
 package com.mustafabulu.billing.common.web;
 
+import com.mustafabulu.billing.common.exception.ApiErrorCode;
+import com.mustafabulu.billing.common.exception.ConflictException;
 import com.mustafabulu.billing.common.exception.DomainValidationException;
+import com.mustafabulu.billing.common.exception.ResourceNotFoundException;
+import com.mustafabulu.billing.common.exception.UpstreamServiceException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -29,7 +35,7 @@ public class GlobalApiExceptionHandler {
         }
         return buildResponse(
                 HttpStatus.BAD_REQUEST,
-                "VALIDATION_ERROR",
+                ApiErrorCode.VALIDATION_ERROR,
                 "Request validation failed",
                 request,
                 details);
@@ -40,10 +46,26 @@ public class GlobalApiExceptionHandler {
                                                                  HttpServletRequest request) {
         return buildResponse(
                 HttpStatus.BAD_REQUEST,
-                "INVALID_JSON",
+                ApiErrorCode.INVALID_JSON,
                 "Malformed JSON request body",
                 request,
                 Map.of());
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleConstraintViolation(ConstraintViolationException ex,
+                                                                      HttpServletRequest request) {
+        Map<String, String> details = new LinkedHashMap<>();
+        for (ConstraintViolation<?> violation : ex.getConstraintViolations()) {
+            String path = violation.getPropertyPath() == null ? "request" : violation.getPropertyPath().toString();
+            details.put(path, violation.getMessage());
+        }
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                ApiErrorCode.CONSTRAINT_VIOLATION,
+                "Request constraint validation failed",
+                request,
+                details);
     }
 
     @ExceptionHandler(DomainValidationException.class)
@@ -51,7 +73,40 @@ public class GlobalApiExceptionHandler {
                                                                    HttpServletRequest request) {
         return buildResponse(
                 HttpStatus.BAD_REQUEST,
-                "DOMAIN_VALIDATION_ERROR",
+                ApiErrorCode.DOMAIN_VALIDATION_ERROR,
+                ex.getMessage(),
+                request,
+                Map.of());
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleNotFound(ResourceNotFoundException ex,
+                                                           HttpServletRequest request) {
+        return buildResponse(
+                HttpStatus.NOT_FOUND,
+                ApiErrorCode.NOT_FOUND,
+                ex.getMessage(),
+                request,
+                Map.of());
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleConflict(ConflictException ex,
+                                                           HttpServletRequest request) {
+        return buildResponse(
+                HttpStatus.CONFLICT,
+                ApiErrorCode.CONFLICT,
+                ex.getMessage(),
+                request,
+                Map.of());
+    }
+
+    @ExceptionHandler(UpstreamServiceException.class)
+    public ResponseEntity<ApiErrorResponse> handleUpstreamService(UpstreamServiceException ex,
+                                                                  HttpServletRequest request) {
+        return buildResponse(
+                HttpStatus.FAILED_DEPENDENCY,
+                ApiErrorCode.FAILED_DEPENDENCY,
                 ex.getMessage(),
                 request,
                 Map.of());
@@ -75,10 +130,18 @@ public class GlobalApiExceptionHandler {
         log.error("Unhandled exception for path {}: {}", request.getRequestURI(), ex.getMessage(), ex);
         return buildResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                "INTERNAL_ERROR",
+                ApiErrorCode.INTERNAL_ERROR,
                 "Unexpected server error",
                 request,
                 Map.of());
+    }
+
+    private ResponseEntity<ApiErrorResponse> buildResponse(HttpStatus status,
+                                                           ApiErrorCode code,
+                                                           String message,
+                                                           HttpServletRequest request,
+                                                           Map<String, String> details) {
+        return buildResponse(status, code.value(), message, request, details);
     }
 
     private ResponseEntity<ApiErrorResponse> buildResponse(HttpStatus status,

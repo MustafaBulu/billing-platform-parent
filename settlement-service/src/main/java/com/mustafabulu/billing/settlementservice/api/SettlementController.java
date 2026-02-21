@@ -1,5 +1,6 @@
 package com.mustafabulu.billing.settlementservice.api;
 
+import com.mustafabulu.billing.common.exception.ResourceNotFoundException;
 import com.mustafabulu.billing.common.web.ApiErrorResponse;
 import com.mustafabulu.billing.settlementservice.api.dto.StartSettlementRequest;
 import com.mustafabulu.billing.settlementservice.application.SettlementSagaService;
@@ -21,7 +22,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1/settlements")
@@ -91,7 +91,7 @@ public class SettlementController {
                                   @PathVariable("sagaId") String sagaId) {
         SettlementSaga saga = settlementSagaService.getById(sagaId);
         if (saga == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Settlement saga not found: " + sagaId);
+            throw new ResourceNotFoundException("Settlement saga not found: " + sagaId);
         }
         return saga;
     }

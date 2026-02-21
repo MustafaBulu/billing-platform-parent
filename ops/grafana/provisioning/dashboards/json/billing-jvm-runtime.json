@@ -1,0 +1,81 @@
+{
+  "id": null,
+  "uid": "billing-jvm-runtime",
+  "title": "Billing Platform - JVM & Runtime",
+  "tags": ["billing", "jvm", "runtime"],
+  "timezone": "",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "JVM Memory Used by Service (bytes)",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(jvm_memory_used_bytes{area=\"heap\",job=~\".*-service\"}) by (job)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM Memory Max by Service (bytes)",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(jvm_memory_max_bytes{area=\"heap\",job=~\".*-service\"}) by (job)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Process CPU Usage by Service",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "avg(process_cpu_usage{job=~\".*-service\"}) by (job)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM Live Threads by Service",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "jvm_threads_live_threads{job=~\".*-service\"}",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "GC Pause Time Rate by Service (seconds/s)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 18 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(jvm_gc_pause_seconds_sum{job=~\".*-service\"}[5m])) by (job)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

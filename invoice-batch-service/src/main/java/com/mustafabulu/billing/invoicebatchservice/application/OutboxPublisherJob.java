@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 public class OutboxPublisherJob {
@@ -31,6 +32,7 @@ public class OutboxPublisherJob {
     }
 
     @Scheduled(fixedDelayString = "${platform.outbox.publisher.fixed-delay-ms:5000}")
+    @Transactional
     public void publishPendingOutboxEvents() {
         if (!enabled) {
             return;
@@ -63,4 +65,3 @@ public class OutboxPublisherJob {
         }
     }
 }
-
