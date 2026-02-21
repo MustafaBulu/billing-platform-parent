@@ -11,6 +11,7 @@ public record GenerateInvoiceRequest(
         @NotBlank String customerId,
         @NotBlank String billingPeriod,
         @NotBlank String currency,
-        @NotEmpty List<@NotNull BigDecimal> lineAmounts
+        @NotEmpty List<@NotNull BigDecimal> lineAmounts,
+        String idempotencyKey
 ) {
 }

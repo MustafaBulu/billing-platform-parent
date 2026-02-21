@@ -6,6 +6,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "tenants")
+@SuppressWarnings("unused")
 public class TenantDocument {
     @Id
     private String id;

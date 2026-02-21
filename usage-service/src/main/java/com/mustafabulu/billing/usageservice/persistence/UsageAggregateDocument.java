@@ -7,6 +7,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "usage_aggregates")
 @CompoundIndex(name = "tenant_customer_metric_unique", def = "{'tenantId': 1, 'customerId': 1, 'metricCode': 1}", unique = true)
+@SuppressWarnings("unused")
 public class UsageAggregateDocument {
     @Id
     private String id;

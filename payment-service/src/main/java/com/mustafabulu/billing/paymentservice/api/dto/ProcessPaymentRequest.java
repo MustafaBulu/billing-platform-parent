@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 public record ProcessPaymentRequest(
         @NotBlank String tenantId,
         @NotBlank String invoiceId,
+        @NotBlank String idempotencyKey,
         @NotNull @Positive BigDecimal amount,
         @NotBlank String currency
 ) {

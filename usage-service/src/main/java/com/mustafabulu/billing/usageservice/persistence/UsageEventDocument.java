@@ -7,6 +7,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "usage_events")
 @CompoundIndex(name = "tenant_idempotency_unique", def = "{'tenantId': 1, 'idempotencyKey': 1}", unique = true)
+@SuppressWarnings("unused")
 public class UsageEventDocument {
     @Id
     private String id;

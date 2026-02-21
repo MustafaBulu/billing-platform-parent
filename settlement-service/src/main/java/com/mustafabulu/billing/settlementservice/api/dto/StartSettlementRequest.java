@@ -9,6 +9,7 @@ public record StartSettlementRequest(
         @NotBlank String tenantId,
         @NotBlank String invoiceId,
         @NotBlank String paymentTransactionId,
+        @NotBlank String idempotencyKey,
         @NotNull @Positive BigDecimal amount,
         @NotBlank String currency,
         @NotBlank String paymentStatus

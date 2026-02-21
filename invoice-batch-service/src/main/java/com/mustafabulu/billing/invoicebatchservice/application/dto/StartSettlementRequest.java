@@ -6,6 +6,7 @@ public record StartSettlementRequest(
         String tenantId,
         String invoiceId,
         String paymentTransactionId,
+        String idempotencyKey,
         BigDecimal amount,
         String currency,
         String paymentStatus

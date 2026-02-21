@@ -1,0 +1,12 @@
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: billing-local-mongo
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5

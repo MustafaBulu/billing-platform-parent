@@ -29,9 +29,9 @@ public class UsageController {
     }
 
     @GetMapping("/totals/{tenantId}/{customerId}/{metricCode}")
-    public long total(@PathVariable("tenantId") String tenantId,
-                      @PathVariable("customerId") String customerId,
-                      @PathVariable("metricCode") String metricCode) {
+    public long total(@PathVariable String tenantId,
+                      @PathVariable String customerId,
+                      @PathVariable String metricCode) {
         return usageIngestionService.currentTotal(tenantId, customerId, metricCode);
     }
 }

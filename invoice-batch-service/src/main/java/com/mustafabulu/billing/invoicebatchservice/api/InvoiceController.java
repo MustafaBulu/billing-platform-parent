@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1/invoices")
@@ -35,8 +36,12 @@ public class InvoiceController {
     }
 
     @GetMapping("/{invoiceId}")
-    public Invoice getById(@PathVariable("invoiceId") String invoiceId) {
-        return invoiceGenerationService.findById(invoiceId);
+    public Invoice getById(@PathVariable String invoiceId) {
+        Invoice invoice = invoiceGenerationService.findById(invoiceId);
+        if (invoice == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found: " + invoiceId);
+        }
+        return invoice;
     }
 
     @PostMapping("/generate-and-settle")
