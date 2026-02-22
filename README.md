@@ -53,8 +53,19 @@ flowchart LR
     C --> U[Usage Service]
     C --> B[Billing Service]
     C --> I[Invoice Batch Service]
-    I --> P[Payment Service]
-    I --> S[Settlement Service]
+    K[(Kafka Topics)]
+    I -->|PAYMENT_REQUESTED| K
+    I -->|SETTLEMENT_REQUESTED| K
+    I -->|PAYMENT_COMPENSATION_REQUESTED| K
+    K -->|PAYMENT_REQUESTED| P[Payment Service]
+    P -->|PAYMENT_RESULT| K
+    K -->|PAYMENT_RESULT| I
+    K -->|SETTLEMENT_REQUESTED| S[Settlement Service]
+    S -->|SETTLEMENT_RESULT| K
+    K -->|SETTLEMENT_RESULT| I
+    K -->|PAYMENT_COMPENSATION_REQUESTED| P
+    P -->|PAYMENT_COMPENSATION_RESULT| K
+    K -->|PAYMENT_COMPENSATION_RESULT| I
 
     T --> M[(MongoDB)]
     U --> M
