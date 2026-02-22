@@ -76,6 +76,10 @@ jobs:
             echo "SONAR_PROJECT_KEY is required for SonarCloud and must match an existing project."
             exit 1
           fi
+          if [[ "$SONAR_HOST_URL" == *"sonarcloud.io"* ]] && [ -z "$SONAR_ORGANIZATION" ]; then
+            echo "SONAR_ORGANIZATION is required for SonarCloud and must match your organization key."
+            exit 1
+          fi
 
       - name: Run SonarQube analysis
         env:
@@ -89,9 +93,6 @@ jobs:
             PROJECT_KEY="${GITHUB_REPOSITORY/\//_}"
           fi
           ORG="$SONAR_ORGANIZATION"
-          if [[ "$SONAR_HOST_URL" == *"sonarcloud.io"* ]] && [ -z "$ORG" ]; then
-            ORG="$GITHUB_REPOSITORY_OWNER"
-          fi
           SONAR_ORG_ARG=""
           if [ -n "$ORG" ]; then
             SONAR_ORG_ARG="-Dsonar.organization=$ORG"
