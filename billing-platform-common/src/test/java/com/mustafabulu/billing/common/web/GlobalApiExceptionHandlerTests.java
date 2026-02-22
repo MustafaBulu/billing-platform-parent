@@ -9,11 +9,16 @@ import com.mustafabulu.billing.common.exception.UpstreamServiceException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Path;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpInputMessage;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -65,8 +70,17 @@ class GlobalApiExceptionHandlerTests {
     }
 
     @Test
-    void shouldMapUnreadableBody() {
-        var response = handler.handleUnreadableBody(new HttpMessageNotReadableException("bad"), request());
+    @SuppressWarnings("unchecked")
+    void shouldMapUnreadableBody() throws Exception {
+        Class<?> unreadableType = Class.forName("org.springframework.http.converter.HttpMessageNotReadableException");
+        Object unreadable = unreadableType.getConstructor(String.class, HttpInputMessage.class)
+                .newInstance("bad", emptyInputMessage());
+        Method method = GlobalApiExceptionHandler.class.getMethod(
+                "handleUnreadableBody",
+                unreadableType,
+                jakarta.servlet.http.HttpServletRequest.class);
+        ResponseEntity<ApiErrorResponse> response =
+                (ResponseEntity<ApiErrorResponse>) method.invoke(handler, unreadable, request());
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).isNotNull();
@@ -106,5 +120,19 @@ class GlobalApiExceptionHandlerTests {
         assertThat(response.getStatusCode().value()).isEqualTo(500);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().code()).isEqualTo("INTERNAL_ERROR");
+    }
+
+    private static HttpInputMessage emptyInputMessage() {
+        return new HttpInputMessage() {
+            @Override
+            public InputStream getBody() {
+                return new ByteArrayInputStream(new byte[0]);
+            }
+
+            @Override
+            public HttpHeaders getHeaders() {
+                return HttpHeaders.EMPTY;
+            }
+        };
     }
 }
