@@ -7,4 +7,6 @@ public interface PaymentRecordRepository extends MongoRepository<PaymentRecordDo
     Optional<PaymentRecordDocument> findByTenantIdAndOperationCodeAndIdempotencyKey(String tenantId,
                                                                                       String operationCode,
                                                                                       String idempotencyKey);
+
+    Optional<PaymentRecordDocument> findByTenantIdAndTransactionId(String tenantId, String transactionId);
 }

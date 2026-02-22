@@ -7,6 +7,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.mustafabulu.billing.common.events.KafkaTopics;
+import com.mustafabulu.billing.common.events.PaymentCompensationRequestedEvent;
+import com.mustafabulu.billing.common.events.PaymentCompensationResultEvent;
 import com.mustafabulu.billing.common.events.PaymentRequestedEvent;
 import com.mustafabulu.billing.common.events.PaymentResultEvent;
 import com.mustafabulu.billing.paymentservice.domain.PaymentResult;
@@ -77,5 +79,34 @@ class PaymentEventListenerTests {
         PaymentResultEvent published = captor.getValue();
         assertThat(published.status()).isEqualTo("FAILED");
         assertThat(published.transactionId()).isNull();
+    }
+
+    @Test
+    void shouldPublishCompensationResultEvent() {
+        PaymentCompensationRequestedEvent event = new PaymentCompensationRequestedEvent(
+                "evt-3",
+                "tenant-1",
+                "ORCH-3",
+                "idem-3",
+                "TX-3",
+                "SETTLEMENT_FAILED",
+                Instant.parse("2026-02-21T00:00:00Z")
+        );
+        PaymentResult compensationResult = new PaymentResult(
+                "TX-3",
+                "INV-3",
+                new BigDecimal("20.00"),
+                "USD",
+                "COMPENSATED",
+                "COMPENSATED-idem-3",
+                Instant.parse("2026-02-21T00:00:01Z")
+        );
+        when(paymentApplicationService.compensate("tenant-1", "idem-3", "TX-3")).thenReturn(compensationResult);
+
+        listener.onPaymentCompensationRequested(event);
+
+        ArgumentCaptor<PaymentCompensationResultEvent> captor = ArgumentCaptor.forClass(PaymentCompensationResultEvent.class);
+        verify(kafkaTemplate).send(eq(KafkaTopics.PAYMENT_COMPENSATION_RESULT), eq("ORCH-3"), captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo("COMPENSATED");
     }
 }

@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import io.micrometer.core.instrument.Metrics;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ public class InvoiceOrchestrationService {
     private static final String INBOX_STATUS_COMPLETED = "COMPLETED";
     private static final String STATUS_FAILED = "FAILED";
     private static final String STATUS_SETTLED = "SETTLED";
+    private static final String STATUS_COMPENSATED = "COMPENSATED";
 
     private final InvoiceGenerationService invoiceGenerationService;
     private final InboxRecordRepository inboxRecordRepository;
@@ -67,7 +69,9 @@ public class InvoiceOrchestrationService {
                 tenantId, orchestrationIdempotencyKey, orchestrationId);
 
         if (orchestration.getStatus() == OrchestrationStatus.SETTLEMENT_COMPLETED
-                || orchestration.getStatus() == OrchestrationStatus.COMPENSATION_REQUIRED) {
+                || orchestration.getStatus() == OrchestrationStatus.COMPENSATED
+                || orchestration.getStatus() == OrchestrationStatus.FAILED
+                || orchestration.getStatus() == OrchestrationStatus.TIMED_OUT) {
             return replayResult(orchestration, request);
         }
 
@@ -88,6 +92,7 @@ public class InvoiceOrchestrationService {
                     Instant.now()
             );
             writeOutboxEvent(orchestration, "PAYMENT_REQUESTED", paymentRequestedEvent);
+            Metrics.counter("platform.saga.started").increment();
         }
 
         return new InvoiceOrchestrationResult(invoice, null, null);
@@ -175,11 +180,13 @@ public class InvoiceOrchestrationService {
     }
 
     void markFailed(OrchestrationRecordDocument orchestration, String reason) {
-        orchestration.setStatus(OrchestrationStatus.COMPENSATION_REQUIRED);
+        orchestration.setStatus(OrchestrationStatus.FAILED);
         orchestration.setFailureReason(reason);
         orchestration.setUpdatedAt(Instant.now());
         orchestrationRecordRepository.save(orchestration);
+        markInboxCompleted(orchestration.getTenantId(), orchestration.getIdempotencyKey(), orchestration.getOrchestrationId());
         writeOutboxEvent(orchestration, "ORCHESTRATION_FAILED", reason);
+        Metrics.counter("platform.saga.failed").increment();
     }
 
     void writeOutboxEvent(OrchestrationRecordDocument orchestration, String eventType, Object payload) {
@@ -213,7 +220,8 @@ public class InvoiceOrchestrationService {
                     invoice.invoiceId(),
                     invoice.totalAmount(),
                     invoice.currency(),
-                    orchestration.getStatus() == OrchestrationStatus.COMPENSATION_REQUIRED ? STATUS_FAILED : "SUCCESS",
+                    orchestration.getStatus() == OrchestrationStatus.COMPENSATED ? STATUS_COMPENSATED
+                            : orchestration.getStatus() == OrchestrationStatus.FAILED ? STATUS_FAILED : "SUCCESS",
                     null,
                     orchestration.getUpdatedAt()
             );
@@ -221,7 +229,7 @@ public class InvoiceOrchestrationService {
         if (orchestration.getSettlementSagaId() != null) {
             String settlementStatus = orchestration.getStatus() == OrchestrationStatus.SETTLEMENT_COMPLETED
                     ? STATUS_SETTLED
-                    : STATUS_FAILED;
+                    : orchestration.getStatus() == OrchestrationStatus.COMPENSATED ? STATUS_COMPENSATED : STATUS_FAILED;
             settlement = new SettlementResponse(
                     orchestration.getSettlementSagaId(),
                     orchestration.getTenantId(),

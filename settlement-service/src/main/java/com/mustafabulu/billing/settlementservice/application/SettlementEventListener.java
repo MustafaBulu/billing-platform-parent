@@ -7,12 +7,15 @@ import com.mustafabulu.billing.settlementservice.api.dto.StartSettlementRequest;
 import com.mustafabulu.billing.settlementservice.domain.SettlementSaga;
 import java.time.Instant;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
 public class SettlementEventListener {
+    private static final Logger log = LoggerFactory.getLogger(SettlementEventListener.class);
 
     private final SettlementSagaService settlementSagaService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
@@ -29,6 +32,11 @@ public class SettlementEventListener {
             properties = "spring.json.value.default.type=com.mustafabulu.billing.common.events.SettlementRequestedEvent"
     )
     public void onSettlementRequested(SettlementRequestedEvent event) {
+        if (!hasRequiredCorrelation(event.tenantId(), event.orchestrationId(), event.idempotencyKey())) {
+            log.warn("settlement_requested_ignored reason=missing_correlation tenantId={} orchestrationId={} idempotencyKey={}",
+                    event.tenantId(), event.orchestrationId(), event.idempotencyKey());
+            return;
+        }
         SettlementResultEvent resultEvent;
         try {
             SettlementSaga saga = settlementSagaService.start(new StartSettlementRequest(
@@ -70,5 +78,13 @@ public class SettlementEventListener {
         }
 
         kafkaTemplate.send(KafkaTopics.SETTLEMENT_RESULT, event.orchestrationId(), resultEvent);
+    }
+
+    private boolean hasRequiredCorrelation(String tenantId, String orchestrationId, String idempotencyKey) {
+        return isNotBlank(tenantId) && isNotBlank(orchestrationId) && isNotBlank(idempotencyKey);
+    }
+
+    private boolean isNotBlank(String value) {
+        return value != null && !value.isBlank();
     }
 }

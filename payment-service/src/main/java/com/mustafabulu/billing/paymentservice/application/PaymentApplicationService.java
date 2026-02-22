@@ -6,6 +6,7 @@ import com.mustafabulu.billing.paymentservice.api.dto.ProcessPaymentRequest;
 import com.mustafabulu.billing.paymentservice.domain.PaymentResult;
 import com.mustafabulu.billing.paymentservice.persistence.PaymentRecordDocument;
 import com.mustafabulu.billing.paymentservice.persistence.PaymentRecordRepository;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
@@ -61,6 +62,28 @@ public class PaymentApplicationService {
                     .map(this::toDomain)
                     .orElseThrow(() -> duplicateKeyException);
         }
+    }
+
+    @Transactional
+    public PaymentResult compensate(String tenantId, String idempotencyKey, String transactionId) {
+        if (transactionId == null || transactionId.isBlank()) {
+            return new PaymentResult(
+                    null, null, BigDecimal.ZERO, "", "FAILED", "MISSING_TRANSACTION_ID", Instant.now());
+        }
+        PaymentRecordDocument existing = paymentRecordRepository.findByTenantIdAndTransactionId(tenantId, transactionId)
+                .orElse(null);
+        if (existing == null) {
+            return new PaymentResult(
+                    transactionId, null, BigDecimal.ZERO, "", "FAILED", "PAYMENT_NOT_FOUND", Instant.now());
+        }
+        if ("COMPENSATED".equalsIgnoreCase(existing.getStatus())) {
+            return toDomain(existing);
+        }
+
+        existing.setStatus("COMPENSATED");
+        existing.setProviderReference("COMPENSATED-" + idempotencyKey);
+        existing.setProcessedAt(Instant.now());
+        return toDomain(paymentRecordRepository.save(existing));
     }
 
     private PaymentResult toDomain(PaymentRecordDocument document) {

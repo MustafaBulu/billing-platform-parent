@@ -16,6 +16,7 @@ import com.mustafabulu.billing.invoicebatchservice.persistence.OutboxEventReposi
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -40,7 +41,7 @@ class OutboxPublisherJobTests {
 
         outboxPublisherJob.publishPendingOutboxEvents();
 
-        verify(outboxEventRepository, never()).findByStatusOrderByCreatedAtAsc(any(), any(PageRequest.class));
+        verify(outboxEventRepository, never()).findByStatusInOrderByCreatedAtAsc(any(), any(PageRequest.class));
         verify(kafkaTemplate, never()).send(any(), any(), any());
     }
 
@@ -48,8 +49,9 @@ class OutboxPublisherJobTests {
     void shouldPublishPaymentRequestedEventsWhenEnabled() throws Exception {
         ReflectionTestUtils.setField(outboxPublisherJob, "enabled", true);
         ReflectionTestUtils.setField(outboxPublisherJob, "batchSize", 10);
+        ReflectionTestUtils.setField(outboxPublisherJob, "maxAttempts", 3);
         OutboxEventDocument event = newPaymentRequestedEvent("event-1", objectMapper);
-        when(outboxEventRepository.findByStatusOrderByCreatedAtAsc(eq("NEW"), any(PageRequest.class)))
+        when(outboxEventRepository.findByStatusInOrderByCreatedAtAsc(any(), any(PageRequest.class)))
                 .thenReturn(List.of(event));
         when(outboxEventRepository.save(any(OutboxEventDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -67,8 +69,9 @@ class OutboxPublisherJobTests {
     void shouldMarkEventFailedWhenKafkaSendThrows() throws Exception {
         ReflectionTestUtils.setField(outboxPublisherJob, "enabled", true);
         ReflectionTestUtils.setField(outboxPublisherJob, "batchSize", 1);
+        ReflectionTestUtils.setField(outboxPublisherJob, "maxAttempts", 3);
         OutboxEventDocument event = newPaymentRequestedEvent("event-fail", objectMapper);
-        when(outboxEventRepository.findByStatusOrderByCreatedAtAsc(eq("NEW"), any(PageRequest.class)))
+        when(outboxEventRepository.findByStatusInOrderByCreatedAtAsc(any(), any(PageRequest.class)))
                 .thenReturn(List.of(event));
         when(outboxEventRepository.save(any(OutboxEventDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(kafkaTemplate.send(any(), any(), any())).thenThrow(new RuntimeException("kafka down"));
@@ -78,6 +81,23 @@ class OutboxPublisherJobTests {
         assertThat(event.getStatus()).isEqualTo("FAILED");
         assertThat(event.getAttemptCount()).isEqualTo(1);
         assertThat(event.getLastError()).contains("kafka down");
+    }
+
+    @Test
+    void shouldRouteToDeadLetterAfterMaxAttempts() throws Exception {
+        ReflectionTestUtils.setField(outboxPublisherJob, "enabled", true);
+        ReflectionTestUtils.setField(outboxPublisherJob, "batchSize", 1);
+        ReflectionTestUtils.setField(outboxPublisherJob, "maxAttempts", 1);
+        OutboxEventDocument event = newPaymentRequestedEvent("event-dlq", objectMapper);
+        when(outboxEventRepository.findByStatusInOrderByCreatedAtAsc(any(), any(PageRequest.class)))
+                .thenReturn(List.of(event));
+        when(outboxEventRepository.save(any(OutboxEventDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(kafkaTemplate.send(eq("billing.payment.requested"), any(), any())).thenThrow(new RuntimeException("kafka down"));
+
+        outboxPublisherJob.publishPendingOutboxEvents();
+
+        assertThat(event.getStatus()).isEqualTo("DEAD_LETTER");
+        verify(kafkaTemplate).send(eq("billing.dlq"), eq(event.getOrchestrationId()), any(Map.class));
     }
 
     private static OutboxEventDocument newPaymentRequestedEvent(String eventId, ObjectMapper objectMapper) throws Exception {

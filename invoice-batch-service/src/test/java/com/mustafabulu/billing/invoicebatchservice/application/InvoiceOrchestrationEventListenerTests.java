@@ -5,6 +5,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.mustafabulu.billing.common.events.PaymentCompensationResultEvent;
 import com.mustafabulu.billing.common.events.PaymentResultEvent;
 import com.mustafabulu.billing.common.events.SettlementResultEvent;
 import com.mustafabulu.billing.invoicebatchservice.persistence.OrchestrationRecordDocument;
@@ -91,6 +92,7 @@ class InvoiceOrchestrationEventListenerTests {
                 Instant.parse("2026-02-21T00:00:00Z")
         );
         OrchestrationRecordDocument orchestration = orchestration("tenant-1", "idem-3");
+        orchestration.setStatus(OrchestrationStatus.PAYMENT_COMPLETED);
         when(orchestrationRecordRepository.findByTenantIdAndOperationCodeAndIdempotencyKey("tenant-1", OPERATION_CODE, "idem-3"))
                 .thenReturn(Optional.of(orchestration));
         when(orchestrationRecordRepository.save(any(OrchestrationRecordDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -117,6 +119,7 @@ class InvoiceOrchestrationEventListenerTests {
                 Instant.parse("2026-02-21T00:00:00Z")
         );
         OrchestrationRecordDocument orchestration = orchestration("tenant-1", "idem-4");
+        orchestration.setStatus(OrchestrationStatus.PAYMENT_COMPLETED);
         when(orchestrationRecordRepository.findByTenantIdAndOperationCodeAndIdempotencyKey("tenant-1", OPERATION_CODE, "idem-4"))
                 .thenReturn(Optional.of(orchestration));
         when(orchestrationRecordRepository.save(any(OrchestrationRecordDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -124,7 +127,32 @@ class InvoiceOrchestrationEventListenerTests {
         listener.onSettlementResult(event);
 
         verify(orchestrationRecordRepository).save(any(OrchestrationRecordDocument.class));
+        verify(invoiceOrchestrationService).writeOutboxEvent(any(OrchestrationRecordDocument.class), Mockito.eq("PAYMENT_COMPENSATION_REQUESTED"), any());
         verify(invoiceOrchestrationService, never()).markInboxCompleted(any(), any(), any());
+    }
+
+    @Test
+    void shouldCompleteInboxWhenCompensationCompletes() {
+        PaymentCompensationResultEvent event = new PaymentCompensationResultEvent(
+                "evt-5",
+                "tenant-1",
+                "ORCH-1",
+                "idem-5",
+                "TX-5",
+                "COMPENSATED",
+                "COMPENSATED-idem-5",
+                Instant.parse("2026-02-21T00:00:00Z")
+        );
+        OrchestrationRecordDocument orchestration = orchestration("tenant-1", "idem-5");
+        orchestration.setStatus(OrchestrationStatus.COMPENSATION_IN_PROGRESS);
+        when(orchestrationRecordRepository.findByTenantIdAndOperationCodeAndIdempotencyKey("tenant-1", OPERATION_CODE, "idem-5"))
+                .thenReturn(Optional.of(orchestration));
+        when(orchestrationRecordRepository.save(any(OrchestrationRecordDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        listener.onPaymentCompensationResult(event);
+
+        verify(orchestrationRecordRepository).save(any(OrchestrationRecordDocument.class));
+        verify(invoiceOrchestrationService).markInboxCompleted("tenant-1", "idem-5", "ORCH-1");
     }
 
     private static OrchestrationRecordDocument orchestration(String tenantId, String idempotencyKey) {

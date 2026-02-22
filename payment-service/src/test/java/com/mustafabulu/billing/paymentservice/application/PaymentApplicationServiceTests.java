@@ -121,6 +121,21 @@ class PaymentApplicationServiceTests {
         assertThat(result.providerReference()).isEqualTo("APPROVED-context");
     }
 
+    @Test
+    void shouldMarkPaymentCompensated() {
+        PaymentRecordDocument existing = persisted(
+                "tenant-1", "tenant-1:PAYMENT_PROCESS:idem-6", "INV-6", "SUCCESS", "APPROVED-6");
+        existing.setTransactionId("TX-6");
+        when(paymentRecordRepository.findByTenantIdAndTransactionId("tenant-1", "TX-6"))
+                .thenReturn(Optional.of(existing));
+        when(paymentRecordRepository.save(any(PaymentRecordDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PaymentResult result = paymentApplicationService.compensate("tenant-1", "idem-6", "TX-6");
+
+        assertThat(result.status()).isEqualTo("COMPENSATED");
+        assertThat(result.providerReference()).isEqualTo("COMPENSATED-idem-6");
+    }
+
     private static PaymentRecordDocument persisted(String tenantId,
                                                    String idempotencyKey,
                                                    String invoiceId,
