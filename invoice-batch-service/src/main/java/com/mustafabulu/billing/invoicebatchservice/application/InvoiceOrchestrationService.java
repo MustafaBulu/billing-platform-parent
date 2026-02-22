@@ -30,6 +30,7 @@ public class InvoiceOrchestrationService {
     private static final String INBOX_STATUS_PROCESSING = "PROCESSING";
     private static final String INBOX_STATUS_COMPLETED = "COMPLETED";
     private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_SUCCESS = "SUCCESS";
     private static final String STATUS_SETTLED = "SETTLED";
     private static final String STATUS_COMPENSATED = "COMPENSATED";
 
@@ -215,21 +216,19 @@ public class InvoiceOrchestrationService {
         SettlementResponse settlement = null;
 
         if (orchestration.getPaymentTransactionId() != null) {
+            String paymentStatus = resolvePaymentStatus(orchestration.getStatus());
             payment = new PaymentProcessResponse(
                     orchestration.getPaymentTransactionId(),
                     invoice.invoiceId(),
                     invoice.totalAmount(),
                     invoice.currency(),
-                    orchestration.getStatus() == OrchestrationStatus.COMPENSATED ? STATUS_COMPENSATED
-                            : orchestration.getStatus() == OrchestrationStatus.FAILED ? STATUS_FAILED : "SUCCESS",
+                    paymentStatus,
                     null,
                     orchestration.getUpdatedAt()
             );
         }
         if (orchestration.getSettlementSagaId() != null) {
-            String settlementStatus = orchestration.getStatus() == OrchestrationStatus.SETTLEMENT_COMPLETED
-                    ? STATUS_SETTLED
-                    : orchestration.getStatus() == OrchestrationStatus.COMPENSATED ? STATUS_COMPENSATED : STATUS_FAILED;
+            String settlementStatus = resolveSettlementStatus(orchestration.getStatus());
             settlement = new SettlementResponse(
                     orchestration.getSettlementSagaId(),
                     orchestration.getTenantId(),
@@ -246,6 +245,26 @@ public class InvoiceOrchestrationService {
         }
 
         return new InvoiceOrchestrationResult(invoice, payment, settlement);
+    }
+
+    private String resolvePaymentStatus(OrchestrationStatus status) {
+        if (status == OrchestrationStatus.COMPENSATED) {
+            return STATUS_COMPENSATED;
+        }
+        if (status == OrchestrationStatus.FAILED) {
+            return STATUS_FAILED;
+        }
+        return STATUS_SUCCESS;
+    }
+
+    private String resolveSettlementStatus(OrchestrationStatus status) {
+        if (status == OrchestrationStatus.SETTLEMENT_COMPLETED) {
+            return STATUS_SETTLED;
+        }
+        if (status == OrchestrationStatus.COMPENSATED) {
+            return STATUS_COMPENSATED;
+        }
+        return STATUS_FAILED;
     }
 
     private String buildOrchestrationIdempotencyKey(GenerateInvoiceRequest request) {

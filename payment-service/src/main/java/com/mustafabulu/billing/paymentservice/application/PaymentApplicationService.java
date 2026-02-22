@@ -17,6 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class PaymentApplicationService {
 
     private static final String OPERATION_CODE = "PAYMENT_PROCESS";
+    private static final String STATUS_SUCCESS = "SUCCESS";
+    private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_COMPENSATED = "COMPENSATED";
 
     private final BankSoapGatewayMock bankSoapGatewayMock;
     private final PaymentRecordRepository paymentRecordRepository;
@@ -40,7 +43,7 @@ public class PaymentApplicationService {
         }
 
         String providerReference = bankSoapGatewayMock.authorize(request.amount(), request.currency(), request.invoiceId());
-        String status = providerReference.startsWith("APPROVED") ? "SUCCESS" : "FAILED";
+        String status = providerReference.startsWith("APPROVED") ? STATUS_SUCCESS : STATUS_FAILED;
 
         PaymentRecordDocument document = new PaymentRecordDocument();
         document.setTenantId(effectiveTenantId);
@@ -68,20 +71,20 @@ public class PaymentApplicationService {
     public PaymentResult compensate(String tenantId, String idempotencyKey, String transactionId) {
         if (transactionId == null || transactionId.isBlank()) {
             return new PaymentResult(
-                    null, null, BigDecimal.ZERO, "", "FAILED", "MISSING_TRANSACTION_ID", Instant.now());
+                    null, null, BigDecimal.ZERO, "", STATUS_FAILED, "MISSING_TRANSACTION_ID", Instant.now());
         }
         PaymentRecordDocument existing = paymentRecordRepository.findByTenantIdAndTransactionId(tenantId, transactionId)
                 .orElse(null);
         if (existing == null) {
             return new PaymentResult(
-                    transactionId, null, BigDecimal.ZERO, "", "FAILED", "PAYMENT_NOT_FOUND", Instant.now());
+                    transactionId, null, BigDecimal.ZERO, "", STATUS_FAILED, "PAYMENT_NOT_FOUND", Instant.now());
         }
-        if ("COMPENSATED".equalsIgnoreCase(existing.getStatus())) {
+        if (STATUS_COMPENSATED.equalsIgnoreCase(existing.getStatus())) {
             return toDomain(existing);
         }
 
-        existing.setStatus("COMPENSATED");
-        existing.setProviderReference("COMPENSATED-" + idempotencyKey);
+        existing.setStatus(STATUS_COMPENSATED);
+        existing.setProviderReference(STATUS_COMPENSATED + "-" + idempotencyKey);
         existing.setProcessedAt(Instant.now());
         return toDomain(paymentRecordRepository.save(existing));
     }

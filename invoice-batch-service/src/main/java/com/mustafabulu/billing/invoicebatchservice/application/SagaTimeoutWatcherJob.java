@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 public class SagaTimeoutWatcherJob {
+    private static final String SAGA_TIMEOUT_REASON = "SAGA_TIMEOUT";
 
     private final OrchestrationRecordRepository orchestrationRecordRepository;
     private final InvoiceOrchestrationService invoiceOrchestrationService;
@@ -60,13 +61,13 @@ public class SagaTimeoutWatcherJob {
         }
         if (orchestration.getStatus() == OrchestrationStatus.PAYMENT_COMPLETED
                 || orchestration.getStatus() == OrchestrationStatus.COMPENSATION_REQUIRED) {
-            requestCompensation(orchestration, "SAGA_TIMEOUT");
+            requestCompensation(orchestration, SAGA_TIMEOUT_REASON);
             Metrics.counter("platform.saga.timeout").increment();
             return;
         }
 
         orchestration.setStatus(OrchestrationStatus.TIMED_OUT);
-        orchestration.setFailureReason("SAGA_TIMEOUT");
+        orchestration.setFailureReason(SAGA_TIMEOUT_REASON);
         orchestration.setUpdatedAt(Instant.now());
         orchestrationRecordRepository.save(orchestration);
         invoiceOrchestrationService.markInboxCompleted(
@@ -74,7 +75,7 @@ public class SagaTimeoutWatcherJob {
                 orchestration.getIdempotencyKey(),
                 orchestration.getOrchestrationId()
         );
-        invoiceOrchestrationService.writeOutboxEvent(orchestration, "ORCHESTRATION_TIMEOUT", "SAGA_TIMEOUT");
+        invoiceOrchestrationService.writeOutboxEvent(orchestration, "ORCHESTRATION_TIMEOUT", SAGA_TIMEOUT_REASON);
         Metrics.counter("platform.saga.timeout").increment();
     }
 

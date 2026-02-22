@@ -18,6 +18,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class PaymentEventListener {
     private static final Logger log = LoggerFactory.getLogger(PaymentEventListener.class);
+    private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_COMPENSATED = "COMPENSATED";
 
     private final PaymentApplicationService paymentApplicationService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
@@ -71,7 +73,7 @@ public class PaymentEventListener {
                     null,
                     event.amount(),
                     event.currency(),
-                    "FAILED",
+                    STATUS_FAILED,
                     exception.getMessage(),
                     Instant.now()
             );
@@ -104,7 +106,7 @@ public class PaymentEventListener {
                     event.orchestrationId(),
                     event.idempotencyKey(),
                     event.transactionId(),
-                    "COMPENSATED".equalsIgnoreCase(result.status()) ? "COMPENSATED" : "FAILED",
+                    STATUS_COMPENSATED.equalsIgnoreCase(result.status()) ? STATUS_COMPENSATED : STATUS_FAILED,
                     result.providerReference(),
                     result.processedAt()
             );
@@ -115,7 +117,7 @@ public class PaymentEventListener {
                     event.orchestrationId(),
                     event.idempotencyKey(),
                     event.transactionId(),
-                    "FAILED",
+                    STATUS_FAILED,
                     exception.getMessage(),
                     Instant.now()
             );
