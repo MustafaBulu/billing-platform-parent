@@ -66,9 +66,14 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN || vars.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL || vars.SONAR_HOST_URL }}
           SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY || vars.SONAR_PROJECT_KEY }}
+          SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION || vars.SONAR_ORGANIZATION }}
         run: |
           if [ -z "$SONAR_TOKEN" ] || [ -z "$SONAR_HOST_URL" ]; then
             echo "SONAR_TOKEN or SONAR_HOST_URL is not configured."
+            exit 1
+          fi
+          if [[ "$SONAR_HOST_URL" == *"sonarcloud.io"* ]] && [ -z "$SONAR_ORGANIZATION" ]; then
+            echo "SONAR_ORGANIZATION is required for SonarCloud."
             exit 1
           fi
 
@@ -77,16 +82,22 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN || vars.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL || vars.SONAR_HOST_URL }}
           SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY || vars.SONAR_PROJECT_KEY }}
+          SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION || vars.SONAR_ORGANIZATION }}
         run: |
           PROJECT_KEY="$SONAR_PROJECT_KEY"
           if [ -z "$PROJECT_KEY" ]; then
             PROJECT_KEY="${GITHUB_REPOSITORY/\//_}"
           fi
+          SONAR_ORG_ARG=""
+          if [ -n "$SONAR_ORGANIZATION" ]; then
+            SONAR_ORG_ARG="-Dsonar.organization=$SONAR_ORGANIZATION"
+          fi
           ./mvnw -B -ntp sonar:sonar \
             -Dsonar.host.url="$SONAR_HOST_URL" \
             -Dsonar.token="$SONAR_TOKEN" \
             -Dsonar.projectKey="$PROJECT_KEY" \
-            -Dsonar.projectName="${GITHUB_REPOSITORY}"
+            -Dsonar.projectName="${GITHUB_REPOSITORY}" \
+            $SONAR_ORG_ARG
 
       - name: Upload Surefire reports
         if: always()
