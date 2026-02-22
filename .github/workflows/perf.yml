@@ -16,6 +16,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Make Maven wrapper executable
+        run: chmod +x mvnw
+
+      - name: Build service jars for Docker images
+        run: ./mvnw -B -ntp -DskipTests -pl tenant-service,usage-service,billing-service,invoice-batch-service,payment-service,settlement-service -am package
+
       - name: Start platform stack
         run: docker compose -f docker-compose.local.yml up -d --build
 
