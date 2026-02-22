@@ -16,11 +16,14 @@
   <a href="https://github.com/features/actions" title="GitHub Actions"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/githubactions/githubactions-original.svg" width="40" height="40" alt="GitHub Actions"/></a>
 </p>
 
-Spring Boot microservices billing playground focused on multi-tenant usage rating, invoice orchestration, payment, settlement, and production-style observability.
+`billing-platform-parent` is a multi-tenant, usage-based billing reference project built with Spring Boot microservices.
+It demonstrates an end-to-end billing lifecycle: tenant onboarding, usage ingestion, rating, invoice generation, payment processing, and settlement orchestration.
+The project is designed as a practical playground for engineers who want production-style patterns such as idempotency, outbox/inbox reliability, quality gates, and observability.
 
-- Domain scope: tenant, usage, billing, invoice, payment, settlement
+- Business scope: tenant, usage, billing, invoice, payment, settlement
+- Reliability patterns: idempotency, saga-like settlement flow, orchestration with outbox/inbox records
 - Observability: Prometheus + Grafana + Loki
-- Delivery: GitHub Actions CI/CD + SonarCloud + Gitleaks
+- Delivery pipeline: GitHub Actions CI/CD + SonarCloud + Gitleaks
 
 ## Highlights
 
