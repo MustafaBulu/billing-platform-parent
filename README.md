@@ -1,208 +1,209 @@
-# Multi-Tenant Usage-Based Billing & Settlement SaaS Platform
+# Billing Platform Parent
 
-Cloud-native multi-module Maven project for a multi-tenant billing infrastructure.
+Multi-tenant, usage-based billing platform built with Java 21 and Spring Boot.  
+This repository contains six cooperating microservices plus shared platform components.
+
+## What This Project Provides
+
+- Multi-tenant context propagation (`X-Tenant-Id`)
+- Usage ingestion and aggregation
+- Rating and billing calculations
+- Invoice generation and orchestration
+- Payment processing facade
+- Settlement saga facade
+- Shared security, idempotency, error handling, and request correlation
+- CI/CD with GitHub Actions + SonarCloud analysis + Gitleaks
 
 ## Modules
-- `billing-platform-common`: shared multi-tenant context, DTOs, and exceptions
-- `tenant-service`: tenant and plan management
-- `usage-service`: usage ingestion and idempotent tracking
-- `billing-service`: charge calculation domain entrypoint
-- `invoice-batch-service`: invoice generation batch jobs
-- `payment-service`: SOAP-facing payment processing facade
-- `settlement-service`: saga-oriented settlement orchestration facade
+
+| Module | Purpose | Default Port |
+|---|---|---|
+| `billing-platform-common` | Shared filters, exceptions, tenant/idempotency/web utilities | - |
+| `tenant-service` | Tenant lifecycle APIs | `8081` |
+| `usage-service` | Usage event ingestion and totals | `8082` |
+| `billing-service` | Rating / billable amount calculation | `8083` |
+| `invoice-batch-service` | Invoice generation + orchestration flow | `8084` |
+| `payment-service` | Payment processing endpoint/facade | `8085` |
+| `settlement-service` | Settlement orchestration/saga endpoint | `8086` |
 
 ## Tech Stack
+
 - Java 21
 - Spring Boot 3.3.x
 - Maven multi-module
-- Spring Batch (invoice service)
-- Spring Web + Validation
+- MongoDB
+- Docker / Docker Compose
+- GitHub Actions (CI/CD)
+- SonarCloud
+- Grafana + Prometheus + Loki
+- k6 (performance testing)
 
-## Build
+## Quick Start (Local)
+
+### 1. Prerequisites
+
+- JDK 21
+- Docker Desktop (or Docker Engine + Compose)
+
+### 2. Build
+
 ```bash
-./mvnw clean verify
+./mvnw -B -ntp clean verify
 ```
 
-## Run a Service
+PowerShell:
+
+```powershell
+.\mvnw.cmd -B -ntp clean verify
+```
+
+### 3. Start full local platform (recommended)
+
+```bash
+docker compose -f docker-compose.local.yml up -d --build
+```
+
+### 4. Health checks
+
+- `http://localhost:8081/actuator/health/readiness`
+- `http://localhost:8082/actuator/health/readiness`
+- `http://localhost:8083/actuator/health/readiness`
+- `http://localhost:8084/actuator/health/readiness`
+- `http://localhost:8085/actuator/health/readiness`
+- `http://localhost:8086/actuator/health/readiness`
+
+## Run a Single Service
+
 ```bash
 ./mvnw -pl tenant-service spring-boot:run
 ```
 
-## IntelliJ Quick Start
-1. Open the root project as a Maven project and set Project SDK to Java 21.
-2. Start local MongoDB once:
-```bash
-docker compose -f docker-compose.local.yml up -d
+PowerShell:
+
+```powershell
+.\mvnw.cmd -pl tenant-service spring-boot:run
 ```
-3. Run any service from IntelliJ:
-   - `Run > Edit Configurations... > + > Spring Boot`
-   - Main class examples:
-     - `com.mustafabulu.billing.tenantservice.TenantServiceApplication`
-     - `com.mustafabulu.billing.usageservice.UsageServiceApplication`
-     - `com.mustafabulu.billing.billingservice.BillingServiceApplication`
-     - `com.mustafabulu.billing.invoicebatchservice.InvoiceBatchServiceApplication`
-     - `com.mustafabulu.billing.paymentservice.PaymentServiceApplication`
-     - `com.mustafabulu.billing.settlementservice.SettlementServiceApplication`
-4. If ports are busy, change `server.port` in the corresponding module `application.properties`.
 
-### Local Service URLs
-- Tenant: `http://localhost:8081`
-- Usage: `http://localhost:8082`
-- Billing: `http://localhost:8083`
-- Invoice: `http://localhost:8084`
-- Payment: `http://localhost:8085`
-- Settlement: `http://localhost:8086`
+## API Docs
 
-### OpenAPI / Swagger
 - OpenAPI JSON: `http://localhost:<port>/v3/api-docs`
 - Swagger UI: `http://localhost:<port>/swagger-ui/index.html`
 
-### Security & Observability Toggles
-Common defaults are added to each service `application.properties`:
-- `platform.security.auth.mode=bearer` (`none` | `api-key` | `bearer`)
-- `platform.security.authorization.enabled=true`
-- `platform.security.api-key.value=${PLATFORM_SECURITY_API_KEY_VALUE:}`
-- `platform.security.bearer.tokens=${PLATFORM_SECURITY_BEARER_TOKENS:dev-admin-token}` (comma-separated allowlist)
-- `platform.security.bearer.token-scopes=${PLATFORM_SECURITY_BEARER_TOKEN_SCOPES:...}`
-- `platform.security.bearer.token-tenants=${PLATFORM_SECURITY_BEARER_TOKEN_TENANTS:...}`
-- `platform.security.tenant-guard.enabled=true`
-- `platform.rate-limit.enabled=true`
-- `platform.rate-limit.max-requests=240`
-- `platform.rate-limit.window-seconds=60`
+## Security and Request Headers
 
-If `platform.security.auth.mode=api-key`, send:
-- Header: `X-API-Key: <your-key>`
+Common auth properties (per service):
 
-If `platform.security.auth.mode=bearer`, send:
-- Header: `Authorization: Bearer <token>`
-- Scope mapping format:
-  - `PLATFORM_SECURITY_BEARER_TOKEN_SCOPES='tokenA=usage:read|usage:write;tokenB=invoice:read'`
-- Tenant mapping format:
-  - `PLATFORM_SECURITY_BEARER_TOKEN_TENANTS='tokenA=*;tokenB=tenant-a|tenant-b'`
+- `platform.security.auth.mode` = `none | api-key | bearer`
+- `platform.security.authorization.enabled=true|false`
+- `platform.security.tenant-guard.enabled=true|false`
 
-If `platform.security.tenant-guard.enabled=true`, send:
-- Header: `X-Tenant-Id: <tenant-id>`
+Headers:
 
-Request correlation:
-- Request header (optional): `X-Request-Id`
-- Response header (always): `X-Request-Id`
+- `Authorization: Bearer <token>` (bearer mode)
+- `X-API-Key: <key>` (api-key mode)
+- `X-Tenant-Id: <tenant>` (tenant guard enabled endpoints)
+- `X-Request-Id: <id>` (optional; echoed back)
+- `Idempotency-Key: <key>` where applicable
 
-### Observability
+## Observability
+
 - Prometheus: `http://localhost:9091`
 - Grafana: `http://localhost:3300`
-- Service metrics: `http://localhost:<port>/actuator/prometheus`
-- Liveness/Readiness: `http://localhost:<port>/actuator/health/liveness`, `http://localhost:<port>/actuator/health/readiness`
+- Metrics: `http://localhost:<port>/actuator/prometheus`
+- Liveness: `http://localhost:<port>/actuator/health/liveness`
+- Readiness: `http://localhost:<port>/actuator/health/readiness`
 
-Example local env values:
-```bash
-export PLATFORM_SECURITY_API_KEY_VALUE='dev-api-key'
-export PLATFORM_SECURITY_BEARER_TOKENS='dev-admin-token'
-export PLATFORM_SECURITY_BEARER_TOKEN_SCOPES='dev-admin-token=tenant:write|usage:write|usage:read|billing:write|invoice:write|invoice:read|invoice:settle|payment:write|settlement:write|settlement:read'
-export PLATFORM_SECURITY_BEARER_TOKEN_TENANTS='dev-admin-token=*'
-export GF_SECURITY_ADMIN_USER='admin'
-export GF_SECURITY_ADMIN_PASSWORD='strong-local-password'
-```
+## Performance Testing
 
-### Orchestration Reliability
-- Invoice service now includes outbox publisher job:
-  - `platform.outbox.publisher.enabled=true`
-  - `platform.outbox.publisher.batch-size=50`
-  - `platform.outbox.publisher.fixed-delay-ms=5000`
-- Outbox events are marked `SENT`/`FAILED` with retry attempt tracking.
+k6 scenario:
 
-### Performance Testing (k6)
-- End-to-end load scenario script: `perf/k6/scenarios/platform-flow.js`
-- Local runner: `perf/run-local.ps1`
-- CI workflow: `.github/workflows/perf.yml` (manual + nightly)
+- `perf/k6/scenarios/platform-flow.js`
 
-Baseline targets used in k6 thresholds:
-- `p95` latency: `< 300ms`
-- request error rate: `< 1%`
-- default load profile: `10 VUs` for `3m`
+Local runner:
 
-Run locally (PowerShell):
 ```powershell
 ./perf/run-local.ps1
 ```
 
-Override defaults when needed:
-```powershell
-$env:PERF_AUTH_TOKEN="dev-admin-token"
-$env:TARGET_P95_MS="300"
-$env:TARGET_ERROR_RATE="0.01"
-$env:PERF_VUS="20"
-$env:PERF_DURATION="5m"
-./perf/run-local.ps1
-```
+## Kubernetes Base Manifests
 
-Generated artifacts:
-- `perf/results/k6-summary.json`
-- `perf/results/docker-compose.log`
+Path:
 
-### Kubernetes (Base Manifests)
-Kubernetes base manifests are under:
 - `ops/k8s/base`
 
-Includes:
-- namespace, configmap, secret
-- Mongo deployment + PVC
-- all 6 services (`Deployment + Service`)
-- Ingress (`nginx` class) with host-based routing
-- HPA objects for each service
-
 Apply:
+
 ```bash
 kubectl apply -k ops/k8s/base
 ```
 
 Check:
+
 ```bash
 kubectl -n billing-platform get pods,svc,ingress,hpa
 ```
 
-Ingress hosts (for local nginx ingress + localtest.me):
-- `tenant.localtest.me`
-- `usage.localtest.me`
-- `billing.localtest.me`
-- `invoice.localtest.me`
-- `payment.localtest.me`
-- `settlement.localtest.me`
+## CI/CD
 
-Example:
+Workflows:
+
+- `CI`: `.github/workflows/ci.yml`
+- `CD`: `.github/workflows/cd.yml`
+- `Performance`: `.github/workflows/perf.yml`
+
+### CI Includes
+
+- Gitleaks scan
+- Maven `clean verify`
+- Sonar analysis via Maven scanner
+- Test report artifact upload
+
+### SonarCloud Requirements (for this repo)
+
+Set these in GitHub `Secrets` or `Variables`:
+
+- `SONAR_HOST_URL` (SonarCloud: `https://sonarcloud.io`)
+- `SONAR_TOKEN`
+- `SONAR_PROJECT_KEY`
+- `SONAR_ORGANIZATION` (organization key, usually lowercase)
+
+Important:
+
+- SonarCloud project **Automatic Analysis must be OFF** when CI runs `sonar:sonar`.
+
+## Useful Commands
+
 ```bash
-curl -H "Authorization: Bearer dev-admin-token" \
-     -H "Content-Type: application/json" \
-     -d '{"displayName":"Acme Turkey"}' \
-     http://tenant.localtest.me/api/v1/tenants
+# compile fast without tests
+./mvnw -B -ntp -DskipTests compile
+
+# run all tests
+./mvnw -B -ntp test
+
+# run a single module tests
+./mvnw -B -ntp -pl usage-service test
 ```
 
-Notes:
-- Image names in manifests use local tags generated by compose build, e.g. `billing-platform-parent-tenant-service:latest`.
-- For managed clusters, push images to a registry and update `image:` fields.
-- `ops/k8s/base/secret.yaml` is dev-only; replace with cluster secret manager for production.
+## Repository Layout
 
-### CI/CD (GitHub Actions)
-- CI workflow: `.github/workflows/ci.yml`
-  - Trigger: push + pull request
-  - Runs Gitleaks secret scan on repository history
-  - Runs: `./mvnw -B -ntp clean verify`
-  - Runs SonarQube analysis when secrets exist (optional):
-    - `SONAR_HOST_URL`
-    - `SONAR_TOKEN`
-    - `SONAR_PROJECT_KEY` (optional, defaults to `<owner>_<repo>`)
-  - Uploads surefire/failsafe test reports as artifacts
-- CD workflow: `.github/workflows/cd.yml`
-  - Trigger: CI success on `main` or manual dispatch on `main`
-  - Builds and pushes all service images to GHCR:
-    - `ghcr.io/<owner>/billing-platform-<service>:sha-<commit>`
-    - `ghcr.io/<owner>/billing-platform-<service>:latest`
-  - Optional Kubernetes deploy step (enabled when `KUBE_CONFIG` secret is set)
+```text
+.
+├─ billing-platform-common/
+├─ tenant-service/
+├─ usage-service/
+├─ billing-service/
+├─ invoice-batch-service/
+├─ payment-service/
+├─ settlement-service/
+├─ ops/
+│  ├─ k8s/
+│  ├─ grafana/
+│  └─ prometheus/
+├─ perf/
+└─ .github/workflows/
+```
 
-Required secrets for deployment:
-- `KUBE_CONFIG` (base64 or raw kubeconfig content)
+## Notes
 
-## Next Iterations
-- Add MongoDB + Oracle persistence adapters
-- Introduce outbox/inbox and saga state store
-- Add Testcontainers integration test suites per service
-- Add SOAP client/server contract tests
+- Default branch CI concurrency cancels older in-progress runs on the same branch.
+- Existing Sonar issue history/activity is immutable; new analyses reflect current configuration and identity.
