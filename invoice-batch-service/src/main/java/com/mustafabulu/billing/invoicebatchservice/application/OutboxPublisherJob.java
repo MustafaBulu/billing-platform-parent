@@ -1,5 +1,6 @@
 package com.mustafabulu.billing.invoicebatchservice.application;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mustafabulu.billing.common.events.KafkaTopics;
 import com.mustafabulu.billing.common.events.PaymentRequestedEvent;
@@ -71,7 +72,7 @@ public class OutboxPublisherJob {
             event.setPublishedAt(Instant.now());
             event.setLastError(null);
             outboxEventRepository.save(event);
-        } catch (Exception ex) {
+        } catch (JsonProcessingException | RuntimeException ex) {
             event.setStatus(STATUS_FAILED);
             event.setLastError(ex.getMessage());
             outboxEventRepository.save(event);
@@ -89,7 +90,7 @@ public class OutboxPublisherJob {
         };
     }
 
-    private Object resolvePayload(OutboxEventDocument event) throws Exception {
+    private Object resolvePayload(OutboxEventDocument event) throws JsonProcessingException {
         return switch (event.getEventType()) {
             case "PAYMENT_REQUESTED" -> objectMapper.readValue(event.getPayload(), PaymentRequestedEvent.class);
             case "SETTLEMENT_REQUESTED" -> objectMapper.readValue(event.getPayload(), SettlementRequestedEvent.class);

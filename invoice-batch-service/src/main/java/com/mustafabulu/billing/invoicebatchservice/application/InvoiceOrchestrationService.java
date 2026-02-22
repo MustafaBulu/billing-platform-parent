@@ -28,6 +28,8 @@ public class InvoiceOrchestrationService {
     private static final String OPERATION_CODE = "INVOICE_GENERATE_AND_SETTLE";
     private static final String INBOX_STATUS_PROCESSING = "PROCESSING";
     private static final String INBOX_STATUS_COMPLETED = "COMPLETED";
+    private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_SETTLED = "SETTLED";
 
     private final InvoiceGenerationService invoiceGenerationService;
     private final InboxRecordRepository inboxRecordRepository;
@@ -211,15 +213,15 @@ public class InvoiceOrchestrationService {
                     invoice.invoiceId(),
                     invoice.totalAmount(),
                     invoice.currency(),
-                    orchestration.getStatus() == OrchestrationStatus.COMPENSATION_REQUIRED ? "FAILED" : "SUCCESS",
+                    orchestration.getStatus() == OrchestrationStatus.COMPENSATION_REQUIRED ? STATUS_FAILED : "SUCCESS",
                     null,
                     orchestration.getUpdatedAt()
             );
         }
         if (orchestration.getSettlementSagaId() != null) {
             String settlementStatus = orchestration.getStatus() == OrchestrationStatus.SETTLEMENT_COMPLETED
-                    ? "SETTLED"
-                    : "FAILED";
+                    ? STATUS_SETTLED
+                    : STATUS_FAILED;
             settlement = new SettlementResponse(
                     orchestration.getSettlementSagaId(),
                     orchestration.getTenantId(),
@@ -228,9 +230,9 @@ public class InvoiceOrchestrationService {
                     invoice.totalAmount(),
                     invoice.currency(),
                     settlementStatus,
-                    settlementStatus.equals("SETTLED")
-                            ? List.of("STARTED", "PAYMENT_CONFIRMED", "SETTLED")
-                            : List.of("STARTED", "FAILED"),
+                    settlementStatus.equals(STATUS_SETTLED)
+                            ? List.of("STARTED", "PAYMENT_CONFIRMED", STATUS_SETTLED)
+                            : List.of("STARTED", STATUS_FAILED),
                     orchestration.getUpdatedAt()
             );
         }
