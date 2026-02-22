@@ -49,9 +49,25 @@ The project is designed as a practical playground for engineers who want product
 
 ```mermaid
 flowchart LR
-    C[Client] --> CORE[Core Services<br/>Tenant, Usage, Billing, Invoice]
-    CORE <--> K[(Kafka)]
-    K <--> SAGA[Saga Services<br/>Payment, Settlement]
+    C[Client] --> CORE
+
+    subgraph CORE[Core Services]
+        direction TB
+        T[Tenant Service]
+        U[Usage Service]
+        B[Billing Service]
+        I[Invoice Batch Service]
+    end
+
+    subgraph SAGA[Saga Services]
+        direction TB
+        P[Payment Service]
+        S[Settlement Service]
+    end
+
+    I <--> K[(Kafka)]
+    K <--> P
+    K <--> S
 
     CORE --> DB[(DB)]
     SAGA --> DB
