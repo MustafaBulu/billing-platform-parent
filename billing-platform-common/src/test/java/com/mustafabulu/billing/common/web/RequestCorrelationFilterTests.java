@@ -35,8 +35,10 @@ class RequestCorrelationFilterTests {
     void shouldGenerateRequestIdWhenMissing() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = (req, res) -> {
+        };
 
-        filter.doFilter(request, response, new MockFilterChain());
+        filter.doFilter(request, response, chain);
 
         assertThat(response.getHeader(RequestCorrelationFilter.REQUEST_ID_HEADER)).isNotBlank();
     }
