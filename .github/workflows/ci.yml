@@ -102,6 +102,7 @@ jobs:
             -Dsonar.token="$SONAR_TOKEN" \
             -Dsonar.projectKey="$PROJECT_KEY" \
             -Dsonar.projectName="${GITHUB_REPOSITORY}" \
+            -Dsonar.coverage.jacoco.xmlReportPaths="**/target/site/jacoco/jacoco.xml" \
             $SONAR_ORG_ARG
 
       - name: Upload Surefire reports
