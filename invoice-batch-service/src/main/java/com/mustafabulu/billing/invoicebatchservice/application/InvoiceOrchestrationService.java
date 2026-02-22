@@ -2,15 +2,11 @@ package com.mustafabulu.billing.invoicebatchservice.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mustafabulu.billing.common.exception.UpstreamServiceException;
-import com.mustafabulu.billing.common.idempotency.IdempotencyHeaders;
-import com.mustafabulu.billing.common.tenant.TenantContextFilter;
+import com.mustafabulu.billing.common.events.PaymentRequestedEvent;
 import com.mustafabulu.billing.invoicebatchservice.api.dto.GenerateInvoiceRequest;
 import com.mustafabulu.billing.invoicebatchservice.application.dto.InvoiceOrchestrationResult;
-import com.mustafabulu.billing.invoicebatchservice.application.dto.PaymentProcessRequest;
 import com.mustafabulu.billing.invoicebatchservice.application.dto.PaymentProcessResponse;
 import com.mustafabulu.billing.invoicebatchservice.application.dto.SettlementResponse;
-import com.mustafabulu.billing.invoicebatchservice.application.dto.StartSettlementRequest;
 import com.mustafabulu.billing.invoicebatchservice.domain.Invoice;
 import com.mustafabulu.billing.invoicebatchservice.persistence.InboxRecordDocument;
 import com.mustafabulu.billing.invoicebatchservice.persistence.InboxRecordRepository;
@@ -21,26 +17,19 @@ import com.mustafabulu.billing.invoicebatchservice.persistence.OutboxEventDocume
 import com.mustafabulu.billing.invoicebatchservice.persistence.OutboxEventRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Map;
+import java.util.List;
 import java.util.UUID;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 
 @Service
 public class InvoiceOrchestrationService {
     private static final String OPERATION_CODE = "INVOICE_GENERATE_AND_SETTLE";
     private static final String INBOX_STATUS_PROCESSING = "PROCESSING";
     private static final String INBOX_STATUS_COMPLETED = "COMPLETED";
-    private static final String STATUS_FIELD = "status";
 
     private final InvoiceGenerationService invoiceGenerationService;
-    private final RestClient paymentRestClient;
-    private final RestClient settlementRestClient;
     private final InboxRecordRepository inboxRecordRepository;
     private final OrchestrationRecordRepository orchestrationRecordRepository;
     private final OutboxEventRepository outboxEventRepository;
@@ -50,133 +39,71 @@ public class InvoiceOrchestrationService {
                                        InboxRecordRepository inboxRecordRepository,
                                        OrchestrationRecordRepository orchestrationRecordRepository,
                                        OutboxEventRepository outboxEventRepository,
-                                       ObjectMapper objectMapper,
-                                       @Value("${integration.payment.base-url}") String paymentBaseUrl,
-                                       @Value("${integration.settlement.base-url}") String settlementBaseUrl) {
+                                       ObjectMapper objectMapper) {
         this.invoiceGenerationService = invoiceGenerationService;
         this.inboxRecordRepository = inboxRecordRepository;
         this.orchestrationRecordRepository = orchestrationRecordRepository;
         this.outboxEventRepository = outboxEventRepository;
         this.objectMapper = objectMapper;
-        this.paymentRestClient = RestClient.builder().baseUrl(paymentBaseUrl).build();
-        this.settlementRestClient = RestClient.builder().baseUrl(settlementBaseUrl).build();
     }
 
     @Transactional
     public InvoiceOrchestrationResult generateAndSettle(GenerateInvoiceRequest request) {
-        return executeGenerateAndSettle(request, null);
+        return executeGenerateAndSettle(request);
     }
 
     @Transactional
     public InvoiceOrchestrationResult generateAndSettle(GenerateInvoiceRequest request, String authorizationHeader) {
-        return executeGenerateAndSettle(request, authorizationHeader);
+        return executeGenerateAndSettle(request);
     }
 
-    private InvoiceOrchestrationResult executeGenerateAndSettle(GenerateInvoiceRequest request,
-                                                                String authorizationHeader) {
+    private InvoiceOrchestrationResult executeGenerateAndSettle(GenerateInvoiceRequest request) {
         String tenantId = request.tenantId();
         String orchestrationIdempotencyKey = buildOrchestrationIdempotencyKey(request);
         String orchestrationId = ensureInbox(tenantId, orchestrationIdempotencyKey);
         OrchestrationRecordDocument orchestration = ensureOrchestrationRecord(
                 tenantId, orchestrationIdempotencyKey, orchestrationId);
 
-        if (orchestration.getStatus() == OrchestrationStatus.SETTLEMENT_COMPLETED) {
-            return replayCompletedResult(orchestration, request, authorizationHeader);
+        if (orchestration.getStatus() == OrchestrationStatus.SETTLEMENT_COMPLETED
+                || orchestration.getStatus() == OrchestrationStatus.COMPENSATION_REQUIRED) {
+            return replayResult(orchestration, request);
+        }
+
+        Invoice invoice = ensureInvoice(orchestration, request);
+        if (orchestration.getStatus() == OrchestrationStatus.RECEIVED) {
+            orchestration.setStatus(OrchestrationStatus.INVOICE_GENERATED);
+            orchestration.setUpdatedAt(Instant.now());
+            orchestrationRecordRepository.save(orchestration);
+
+            PaymentRequestedEvent paymentRequestedEvent = new PaymentRequestedEvent(
+                    "EVT-" + UUID.randomUUID(),
+                    tenantId,
+                    orchestration.getOrchestrationId(),
+                    orchestrationIdempotencyKey,
+                    invoice.invoiceId(),
+                    invoice.totalAmount(),
+                    invoice.currency(),
+                    Instant.now()
+            );
+            writeOutboxEvent(orchestration, "PAYMENT_REQUESTED", paymentRequestedEvent);
+        }
+
+        return new InvoiceOrchestrationResult(invoice, null, null);
+    }
+
+    private Invoice ensureInvoice(OrchestrationRecordDocument orchestration, GenerateInvoiceRequest request) {
+        if (orchestration.getInvoiceId() != null) {
+            Invoice existing = invoiceGenerationService.findById(orchestration.getInvoiceId());
+            if (existing != null) {
+                return existing;
+            }
         }
 
         Invoice invoice = invoiceGenerationService.generate(request);
         orchestration.setInvoiceId(invoice.invoiceId());
-        orchestration.setStatus(OrchestrationStatus.INVOICE_GENERATED);
         orchestration.setUpdatedAt(Instant.now());
         orchestrationRecordRepository.save(orchestration);
-        writeOutboxEvent(orchestration, "INVOICE_GENERATED", Map.of(
-                "invoiceId", invoice.invoiceId(),
-                "tenantId", tenantId));
-
-        PaymentProcessResponse paymentResponse;
-        try {
-            RestClient.RequestBodySpec paymentRequest = paymentRestClient.post()
-                    .uri("/api/v1/payments/process")
-                    .header(TenantContextFilter.TENANT_HEADER, tenantId)
-                    .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestrationIdempotencyKey);
-            if (hasText(authorizationHeader)) {
-                paymentRequest.header(HttpHeaders.AUTHORIZATION, authorizationHeader);
-            }
-            paymentResponse = paymentRequest
-                    .body(new PaymentProcessRequest(
-                            tenantId,
-                            invoice.invoiceId(),
-                            orchestrationIdempotencyKey,
-                            invoice.totalAmount(),
-                            invoice.currency()))
-                    .retrieve()
-                    .body(PaymentProcessResponse.class);
-        } catch (RestClientException exception) {
-            markFailed(orchestration, "PAYMENT_CALL_FAILED: " + exception.getMessage());
-            throw exception;
-        }
-
-        if (paymentResponse == null) {
-            markFailed(orchestration, "PAYMENT_EMPTY_RESPONSE");
-            throw new UpstreamServiceException("Payment response is empty");
-        }
-
-        orchestration.setPaymentTransactionId(paymentResponse.transactionId());
-        orchestration.setStatus(OrchestrationStatus.PAYMENT_COMPLETED);
-        orchestration.setUpdatedAt(Instant.now());
-        orchestrationRecordRepository.save(orchestration);
-        writeOutboxEvent(orchestration, "PAYMENT_COMPLETED", Map.of(
-                "transactionId", paymentResponse.transactionId(),
-                STATUS_FIELD, paymentResponse.status()));
-
-        SettlementResponse settlementResponse;
-        try {
-            RestClient.RequestBodySpec settlementRequest = settlementRestClient.post()
-                    .uri("/api/v1/settlements/start")
-                    .header(TenantContextFilter.TENANT_HEADER, tenantId)
-                    .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestrationIdempotencyKey);
-            if (hasText(authorizationHeader)) {
-                settlementRequest.header(HttpHeaders.AUTHORIZATION, authorizationHeader);
-            }
-            settlementResponse = settlementRequest
-                    .body(new StartSettlementRequest(
-                            tenantId,
-                            invoice.invoiceId(),
-                            paymentResponse.transactionId(),
-                            orchestrationIdempotencyKey,
-                            invoice.totalAmount(),
-                            invoice.currency(),
-                            paymentResponse.status()))
-                    .retrieve()
-                    .body(SettlementResponse.class);
-        } catch (RestClientException exception) {
-            markFailed(orchestration, "SETTLEMENT_CALL_FAILED: " + exception.getMessage());
-            throw exception;
-        }
-
-        if (settlementResponse == null) {
-            markFailed(orchestration, "SETTLEMENT_EMPTY_RESPONSE");
-            throw new UpstreamServiceException("Settlement response is empty");
-        }
-
-        orchestration.setSettlementSagaId(settlementResponse.sagaId());
-        if ("SETTLED".equalsIgnoreCase(settlementResponse.status())) {
-            orchestration.setStatus(OrchestrationStatus.SETTLEMENT_COMPLETED);
-            orchestration.setFailureReason(null);
-        } else {
-            orchestration.setStatus(OrchestrationStatus.COMPENSATION_REQUIRED);
-            orchestration.setFailureReason("SETTLEMENT_STATUS_" + settlementResponse.status());
-        }
-        orchestration.setUpdatedAt(Instant.now());
-        orchestrationRecordRepository.save(orchestration);
-        writeOutboxEvent(orchestration, "SETTLEMENT_COMPLETED", Map.of(
-                "sagaId", settlementResponse.sagaId(),
-                STATUS_FIELD, settlementResponse.status()));
-        if (orchestration.getStatus() == OrchestrationStatus.SETTLEMENT_COMPLETED) {
-            markInboxCompleted(tenantId, orchestrationIdempotencyKey, orchestration.getOrchestrationId());
-        }
-
-        return new InvoiceOrchestrationResult(invoice, paymentResponse, settlementResponse);
+        return invoice;
     }
 
     private String ensureInbox(String tenantId, String idempotencyKey) {
@@ -232,7 +159,7 @@ public class InvoiceOrchestrationService {
         }
     }
 
-    private void markInboxCompleted(String tenantId, String idempotencyKey, String orchestrationId) {
+    void markInboxCompleted(String tenantId, String idempotencyKey, String orchestrationId) {
         InboxRecordDocument inboxRecord = inboxRecordRepository
                 .findByTenantIdAndOperationCodeAndIdempotencyKey(tenantId, OPERATION_CODE, idempotencyKey)
                 .orElse(null);
@@ -245,17 +172,15 @@ public class InvoiceOrchestrationService {
         inboxRecordRepository.save(inboxRecord);
     }
 
-    private void markFailed(OrchestrationRecordDocument orchestration, String reason) {
+    void markFailed(OrchestrationRecordDocument orchestration, String reason) {
         orchestration.setStatus(OrchestrationStatus.COMPENSATION_REQUIRED);
         orchestration.setFailureReason(reason);
         orchestration.setUpdatedAt(Instant.now());
         orchestrationRecordRepository.save(orchestration);
-        writeOutboxEvent(orchestration, "ORCHESTRATION_FAILED", Map.of(
-                STATUS_FIELD, OrchestrationStatus.COMPENSATION_REQUIRED.name(),
-                "reason", reason));
+        writeOutboxEvent(orchestration, "ORCHESTRATION_FAILED", reason);
     }
 
-    private void writeOutboxEvent(OrchestrationRecordDocument orchestration, String eventType, Map<String, Object> payload) {
+    void writeOutboxEvent(OrchestrationRecordDocument orchestration, String eventType, Object payload) {
         OutboxEventDocument event = new OutboxEventDocument();
         event.setEventId("EVT-" + UUID.randomUUID());
         event.setOrchestrationId(orchestration.getOrchestrationId());
@@ -266,7 +191,7 @@ public class InvoiceOrchestrationService {
         outboxEventRepository.save(event);
     }
 
-    private String toJson(Map<String, Object> payload) {
+    private String toJson(Object payload) {
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException exception) {
@@ -274,49 +199,41 @@ public class InvoiceOrchestrationService {
         }
     }
 
-    private InvoiceOrchestrationResult replayCompletedResult(OrchestrationRecordDocument orchestration,
-                                                             GenerateInvoiceRequest request,
-                                                             String authorizationHeader) {
-        Invoice invoice = invoiceGenerationService.findById(orchestration.getInvoiceId());
-        if (invoice == null) {
-            invoice = invoiceGenerationService.generate(request);
-        }
+    private InvoiceOrchestrationResult replayResult(OrchestrationRecordDocument orchestration,
+                                                    GenerateInvoiceRequest request) {
+        Invoice invoice = ensureInvoice(orchestration, request);
+        PaymentProcessResponse payment = null;
+        SettlementResponse settlement = null;
 
-        RestClient.RequestBodySpec paymentRequest = paymentRestClient.post()
-                .uri("/api/v1/payments/process")
-                .header(TenantContextFilter.TENANT_HEADER, request.tenantId())
-                .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestration.getIdempotencyKey());
-        if (hasText(authorizationHeader)) {
-            paymentRequest.header(HttpHeaders.AUTHORIZATION, authorizationHeader);
+        if (orchestration.getPaymentTransactionId() != null) {
+            payment = new PaymentProcessResponse(
+                    orchestration.getPaymentTransactionId(),
+                    invoice.invoiceId(),
+                    invoice.totalAmount(),
+                    invoice.currency(),
+                    orchestration.getStatus() == OrchestrationStatus.COMPENSATION_REQUIRED ? "FAILED" : "SUCCESS",
+                    null,
+                    orchestration.getUpdatedAt()
+            );
         }
-        PaymentProcessResponse payment = paymentRequest
-                .body(new PaymentProcessRequest(
-                        request.tenantId(),
-                        invoice.invoiceId(),
-                        orchestration.getIdempotencyKey(),
-                        invoice.totalAmount(),
-                        invoice.currency()))
-                .retrieve()
-                .body(PaymentProcessResponse.class);
-
-        RestClient.RequestBodySpec settlementRequest = settlementRestClient.post()
-                .uri("/api/v1/settlements/start")
-                .header(TenantContextFilter.TENANT_HEADER, request.tenantId())
-                .header(IdempotencyHeaders.IDEMPOTENCY_KEY, orchestration.getIdempotencyKey());
-        if (hasText(authorizationHeader)) {
-            settlementRequest.header(HttpHeaders.AUTHORIZATION, authorizationHeader);
+        if (orchestration.getSettlementSagaId() != null) {
+            String settlementStatus = orchestration.getStatus() == OrchestrationStatus.SETTLEMENT_COMPLETED
+                    ? "SETTLED"
+                    : "FAILED";
+            settlement = new SettlementResponse(
+                    orchestration.getSettlementSagaId(),
+                    orchestration.getTenantId(),
+                    invoice.invoiceId(),
+                    orchestration.getPaymentTransactionId(),
+                    invoice.totalAmount(),
+                    invoice.currency(),
+                    settlementStatus,
+                    settlementStatus.equals("SETTLED")
+                            ? List.of("STARTED", "PAYMENT_CONFIRMED", "SETTLED")
+                            : List.of("STARTED", "FAILED"),
+                    orchestration.getUpdatedAt()
+            );
         }
-        SettlementResponse settlement = settlementRequest
-                .body(new StartSettlementRequest(
-                        request.tenantId(),
-                        invoice.invoiceId(),
-                        payment != null ? payment.transactionId() : orchestration.getPaymentTransactionId(),
-                        orchestration.getIdempotencyKey(),
-                        invoice.totalAmount(),
-                        invoice.currency(),
-                        payment != null ? payment.status() : "SUCCESS"))
-                .retrieve()
-                .body(SettlementResponse.class);
 
         return new InvoiceOrchestrationResult(invoice, payment, settlement);
     }
@@ -329,9 +246,5 @@ public class InvoiceOrchestrationService {
         String rawKey = request.tenantId() + "|" + request.customerId() + "|" + request.billingPeriod()
                 + "|" + request.currency() + "|" + request.lineAmounts();
         return "invoice-orchestration-" + UUID.nameUUIDFromBytes(rawKey.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
     }
 }

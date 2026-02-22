@@ -7,20 +7,32 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.mustafabulu.billing.common.events.PaymentRequestedEvent;
 import com.mustafabulu.billing.invoicebatchservice.persistence.OutboxEventDocument;
 import com.mustafabulu.billing.invoicebatchservice.persistence.OutboxEventRepository;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class OutboxPublisherJobTests {
 
     private final OutboxEventRepository outboxEventRepository = Mockito.mock(OutboxEventRepository.class);
-    private final OutboxPublisherJob outboxPublisherJob = new OutboxPublisherJob(outboxEventRepository);
+    @SuppressWarnings("unchecked")
+    private final KafkaTemplate<String, Object> kafkaTemplate = Mockito.mock(KafkaTemplate.class);
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    private final OutboxPublisherJob outboxPublisherJob = new OutboxPublisherJob(
+            outboxEventRepository, kafkaTemplate, objectMapper);
 
     @Test
     void shouldSkipPublishingWhenDisabled() {
@@ -29,55 +41,62 @@ class OutboxPublisherJobTests {
         outboxPublisherJob.publishPendingOutboxEvents();
 
         verify(outboxEventRepository, never()).findByStatusOrderByCreatedAtAsc(any(), any(PageRequest.class));
+        verify(kafkaTemplate, never()).send(any(), any(), any());
     }
 
     @Test
-    void shouldPublishPendingEventsWhenEnabled() {
+    void shouldPublishPaymentRequestedEventsWhenEnabled() throws Exception {
         ReflectionTestUtils.setField(outboxPublisherJob, "enabled", true);
         ReflectionTestUtils.setField(outboxPublisherJob, "batchSize", 10);
-        OutboxEventDocument first = newEvent("event-1");
-        OutboxEventDocument second = newEvent("event-2");
+        OutboxEventDocument event = newPaymentRequestedEvent("event-1", objectMapper);
         when(outboxEventRepository.findByStatusOrderByCreatedAtAsc(eq("NEW"), any(PageRequest.class)))
-                .thenReturn(List.of(first, second));
+                .thenReturn(List.of(event));
         when(outboxEventRepository.save(any(OutboxEventDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         outboxPublisherJob.publishPendingOutboxEvents();
 
+        verify(kafkaTemplate).send(eq("billing.payment.requested"), eq(event.getOrchestrationId()), any(PaymentRequestedEvent.class));
         ArgumentCaptor<OutboxEventDocument> captor = ArgumentCaptor.forClass(OutboxEventDocument.class);
-        verify(outboxEventRepository, Mockito.times(2)).save(captor.capture());
-        assertThat(captor.getAllValues())
-                .allSatisfy(saved -> {
-                    assertThat(saved.getAttemptCount()).isEqualTo(1);
-                    assertThat(saved.getStatus()).isEqualTo("SENT");
-                    assertThat(saved.getPublishedAt()).isNotNull();
-                    assertThat(saved.getLastError()).isNull();
-                });
+        verify(outboxEventRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo("SENT");
+        assertThat(captor.getValue().getPublishedAt()).isNotNull();
+        assertThat(captor.getValue().getAttemptCount()).isEqualTo(1);
     }
 
     @Test
-    void shouldMarkEventFailedWhenPublishingThrows() {
+    void shouldMarkEventFailedWhenKafkaSendThrows() throws Exception {
         ReflectionTestUtils.setField(outboxPublisherJob, "enabled", true);
         ReflectionTestUtils.setField(outboxPublisherJob, "batchSize", 1);
-        OutboxEventDocument event = newEvent("event-fail");
+        OutboxEventDocument event = newPaymentRequestedEvent("event-fail", objectMapper);
         when(outboxEventRepository.findByStatusOrderByCreatedAtAsc(eq("NEW"), any(PageRequest.class)))
                 .thenReturn(List.of(event));
-        when(outboxEventRepository.save(any(OutboxEventDocument.class)))
-                .thenThrow(new RuntimeException("publisher down"))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(outboxEventRepository.save(any(OutboxEventDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(kafkaTemplate.send(any(), any(), any())).thenThrow(new RuntimeException("kafka down"));
 
         outboxPublisherJob.publishPendingOutboxEvents();
 
         assertThat(event.getStatus()).isEqualTo("FAILED");
         assertThat(event.getAttemptCount()).isEqualTo(1);
-        assertThat(event.getLastError()).isEqualTo("publisher down");
+        assertThat(event.getLastError()).contains("kafka down");
     }
 
-    private static OutboxEventDocument newEvent(String eventId) {
+    private static OutboxEventDocument newPaymentRequestedEvent(String eventId, ObjectMapper objectMapper) throws Exception {
+        PaymentRequestedEvent payload = new PaymentRequestedEvent(
+                eventId,
+                "tenant-1",
+                "orch-" + eventId,
+                "idem-1",
+                "INV-1",
+                new BigDecimal("10.00"),
+                "USD",
+                Instant.parse("2026-02-21T00:00:00Z")
+        );
+
         OutboxEventDocument event = new OutboxEventDocument();
         event.setEventId(eventId);
-        event.setEventType("ORCHESTRATION_COMPLETED");
+        event.setEventType("PAYMENT_REQUESTED");
         event.setOrchestrationId("orch-" + eventId);
-        event.setPayload("{\"invoiceId\":\"INV-1\"}");
+        event.setPayload(objectMapper.writeValueAsString(payload));
         event.setStatus("NEW");
         event.setAttemptCount(0);
         event.setCreatedAt(Instant.parse("2026-02-21T00:00:00Z"));
