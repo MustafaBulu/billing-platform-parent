@@ -72,6 +72,10 @@ jobs:
             echo "SONAR_TOKEN or SONAR_HOST_URL is not configured."
             exit 1
           fi
+          if [[ "$SONAR_HOST_URL" == *"sonarcloud.io"* ]] && [ -z "$SONAR_PROJECT_KEY" ]; then
+            echo "SONAR_PROJECT_KEY is required for SonarCloud and must match an existing project."
+            exit 1
+          fi
 
       - name: Run SonarQube analysis
         env:
