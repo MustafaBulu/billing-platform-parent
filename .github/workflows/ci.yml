@@ -72,10 +72,6 @@ jobs:
             echo "SONAR_TOKEN or SONAR_HOST_URL is not configured."
             exit 1
           fi
-          if [[ "$SONAR_HOST_URL" == *"sonarcloud.io"* ]] && [ -z "$SONAR_ORGANIZATION" ]; then
-            echo "SONAR_ORGANIZATION is required for SonarCloud."
-            exit 1
-          fi
 
       - name: Run SonarQube analysis
         env:
@@ -88,9 +84,13 @@ jobs:
           if [ -z "$PROJECT_KEY" ]; then
             PROJECT_KEY="${GITHUB_REPOSITORY/\//_}"
           fi
+          ORG="$SONAR_ORGANIZATION"
+          if [[ "$SONAR_HOST_URL" == *"sonarcloud.io"* ]] && [ -z "$ORG" ]; then
+            ORG="$GITHUB_REPOSITORY_OWNER"
+          fi
           SONAR_ORG_ARG=""
-          if [ -n "$SONAR_ORGANIZATION" ]; then
-            SONAR_ORG_ARG="-Dsonar.organization=$SONAR_ORGANIZATION"
+          if [ -n "$ORG" ]; then
+            SONAR_ORG_ARG="-Dsonar.organization=$ORG"
           fi
           ./mvnw -B -ntp sonar:sonar \
             -Dsonar.host.url="$SONAR_HOST_URL" \
