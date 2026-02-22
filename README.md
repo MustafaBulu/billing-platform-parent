@@ -58,12 +58,11 @@ flowchart LR
     P[Payment Service] <-->|payment + compensation events| K
     S[Settlement Service] <-->|settlement events| K
 
-    T --> M[(MongoDB)]
-    U --> M
-    B --> M
-    I --> M
-    P --> M
-    S --> M
+    T --> MT[(Tenant DB)]
+    U --> MU[(Usage DB)]
+    I --> MI[(Invoice DB)]
+    P --> MP[(Payment DB)]
+    S --> MS[(Settlement DB)]
 
     T --> PR[/Prometheus/]
     U --> PR
