@@ -12,49 +12,67 @@
   <a href="https://github.com/features/actions" title="GitHub Actions"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/githubactions/githubactions-original.svg" width="40" height="40" alt="GitHub Actions"/></a>
 </p>
 
-This is a Spring Boot microservices billing playground focused on multi-tenant usage rating, invoice orchestration, payment, settlement, and production-style observability.
+Spring Boot microservices billing playground focused on multi-tenant usage rating, invoice orchestration, payment, settlement, and production-style observability.
 
-- Platform scope: tenant, usage, billing, invoice, payment, settlement
+- Domain scope: tenant, usage, billing, invoice, payment, settlement
 - Observability: Prometheus + Grafana + Loki
 - Delivery: GitHub Actions CI/CD + SonarCloud + Gitleaks
 
+## Highlights
+
+- Multi-service domain split with shared cross-cutting layer (`billing-platform-common`)
+- Idempotent write flows for usage ingestion, payment, settlement, and orchestration
+- Outbox/inbox style reliability in invoice orchestration
+- Sonar quality gate and JaCoCo coverage in CI
+
 ## Architecture
 
-### Microservices
+### Services
 
-- `billing-platform-common`: shared tenant context, idempotency, security/web filters, common exceptions
-- `tenant-service` (`8081`): tenant management APIs
+- `billing-platform-common`: shared tenant context, idempotency, web/security filters, exceptions
+- `tenant-service` (`8081`): tenant management
 - `usage-service` (`8082`): usage ingestion and aggregate totals
-- `billing-service` (`8083`): usage rating and charge calculation
+- `billing-service` (`8083`): rating and charge calculation
 - `invoice-batch-service` (`8084`): invoice generation and generate-and-settle orchestration
-- `payment-service` (`8085`): payment processing endpoint/facade
-- `settlement-service` (`8086`): settlement saga start/query endpoints
+- `payment-service` (`8085`): payment processing facade
+- `settlement-service` (`8086`): settlement saga start/query
 
-### Infrastructure (Local / Docker Compose)
+### Diagram
 
-- MongoDB (`27017`)
-- Prometheus (`9091`)
-- Grafana (`3300`)
-- Loki + Promtail
+```mermaid
+flowchart LR
+    C[Client] --> T[Tenant Service]
+    C --> U[Usage Service]
+    C --> B[Billing Service]
+    C --> I[Invoice Batch Service]
+    I --> P[Payment Service]
+    I --> S[Settlement Service]
 
-## Orchestration Flow
+    T --> M[(MongoDB)]
+    U --> M
+    B --> M
+    I --> M
+    P --> M
+    S --> M
 
-`POST /api/v1/invoices/generate-and-settle` flow:
-
-1. Invoice is generated in `invoice-batch-service`.
-2. Payment call is sent to `payment-service`.
-3. Settlement call is sent to `settlement-service`.
-4. Orchestration/outbox records are persisted for reliability and replay.
+    T --> PR[/Prometheus/]
+    U --> PR
+    B --> PR
+    I --> PR
+    P --> PR
+    S --> PR
+    PR --> G[Grafana]
+```
 
 ## Prerequisites
 
 - Docker Desktop
 - Docker Compose
-- Java 21 (for local non-Docker runs)
+- Java 21
 
-## Setup
+## Quick Start
 
-1. Build the project:
+1. Build and run all tests:
 
 ```bash
 ./mvnw -B -ntp clean verify
@@ -66,13 +84,13 @@ PowerShell:
 .\mvnw.cmd -B -ntp clean verify
 ```
 
-2. Start full stack:
+2. Start local stack:
 
 ```bash
 docker compose -f docker-compose.local.yml up -d --build
 ```
 
-3. Check health:
+3. Check service readiness:
 
 ```bash
 curl http://localhost:8081/actuator/health/readiness
@@ -83,18 +101,50 @@ curl http://localhost:8085/actuator/health/readiness
 curl http://localhost:8086/actuator/health/readiness
 ```
 
+## Example API Flow
+
+### 1) Create tenant
+
+```bash
+curl -X POST http://localhost:8081/api/v1/tenants \
+  -H "Authorization: Bearer dev-admin-token" \
+  -H "Content-Type: application/json" \
+  -d '{"tenantId":"tenant-demo","displayName":"Tenant Demo","currency":"USD"}'
+```
+
+### 2) Ingest usage event
+
+```bash
+curl -X POST http://localhost:8082/api/v1/usage/events \
+  -H "Authorization: Bearer dev-admin-token" \
+  -H "X-Tenant-Id: tenant-demo" \
+  -H "Idempotency-Key: usage-1" \
+  -H "Content-Type: application/json" \
+  -d '{"tenantId":"tenant-demo","customerId":"cust-1","idempotencyKey":"usage-1","metricCode":"api_call","quantity":25}'
+```
+
+### 3) Generate and settle invoice
+
+```bash
+curl -X POST http://localhost:8084/api/v1/invoices/generate-and-settle \
+  -H "Authorization: Bearer dev-admin-token" \
+  -H "X-Tenant-Id: tenant-demo" \
+  -H "Content-Type: application/json" \
+  -d '{"tenantId":"tenant-demo","customerId":"cust-1","billingPeriod":"2026-02","currency":"USD","lineAmounts":[10.0,5.0],"idempotencyKey":"inv-1"}'
+```
+
 ## Service URLs
 
-- Tenant Service: `http://localhost:8081`
-- Usage Service: `http://localhost:8082`
-- Billing Service: `http://localhost:8083`
-- Invoice Service: `http://localhost:8084`
-- Payment Service: `http://localhost:8085`
-- Settlement Service: `http://localhost:8086`
+- Tenant: `http://localhost:8081`
+- Usage: `http://localhost:8082`
+- Billing: `http://localhost:8083`
+- Invoice: `http://localhost:8084`
+- Payment: `http://localhost:8085`
+- Settlement: `http://localhost:8086`
 - Prometheus: `http://localhost:9091`
 - Grafana: `http://localhost:3300`
 
-## API Documentation (Swagger)
+## API Docs
 
 - Tenant Swagger: `http://localhost:8081/swagger-ui/index.html`
 - Usage Swagger: `http://localhost:8082/swagger-ui/index.html`
@@ -102,14 +152,11 @@ curl http://localhost:8086/actuator/health/readiness
 - Invoice Swagger: `http://localhost:8084/swagger-ui/index.html`
 - Payment Swagger: `http://localhost:8085/swagger-ui/index.html`
 - Settlement Swagger: `http://localhost:8086/swagger-ui/index.html`
-
-OpenAPI JSON format:
-
-- `http://localhost:<port>/v3/api-docs`
+- OpenAPI JSON: `http://localhost:<port>/v3/api-docs`
 
 ## Security and Headers
 
-Main security properties:
+Main properties:
 
 - `platform.security.auth.mode=none|api-key|bearer`
 - `platform.security.authorization.enabled=true|false`
@@ -123,16 +170,11 @@ Common headers:
 - `X-Request-Id: <request-id>`
 - `Idempotency-Key: <idempotency-key>`
 
-## Metrics and Logs
+## Observability
 
-Metrics endpoints:
-
-- `http://localhost:<port>/actuator/prometheus`
-
-Health endpoints:
-
-- `http://localhost:<port>/actuator/health/liveness`
-- `http://localhost:<port>/actuator/health/readiness`
+- Metrics: `http://localhost:<port>/actuator/prometheus`
+- Liveness: `http://localhost:<port>/actuator/health/liveness`
+- Readiness: `http://localhost:<port>/actuator/health/readiness`
 
 ## CI/CD
 
@@ -142,72 +184,47 @@ Workflows:
 - CD: `.github/workflows/cd.yml`
 - Performance: `.github/workflows/perf.yml`
 
-CI pipeline includes:
+CI includes:
 
 - Gitleaks secret scan
 - Maven `clean verify`
-- Sonar analysis (`mvn sonar:sonar`)
+- Sonar analysis
 - Surefire/Failsafe artifact upload
 
-### SonarCloud Configuration
-
-Set these in GitHub `Secrets` or `Variables`:
+Sonar variables/secrets:
 
 - `SONAR_HOST_URL` (`https://sonarcloud.io`)
 - `SONAR_TOKEN`
 - `SONAR_PROJECT_KEY`
 - `SONAR_ORGANIZATION`
 
-Important:
-
-- SonarCloud `Automatic Analysis` must be disabled for this project.
-
 ## Performance Testing
 
 - k6 scenario: `perf/k6/scenarios/platform-flow.js`
-- local run script: `perf/run-local.ps1`
+- local runner: `perf/run-local.ps1`
 - CI perf workflow: `.github/workflows/perf.yml`
 
 ## Kubernetes
 
-Base manifests:
-
-- `ops/k8s/base`
-
-Apply:
+- Manifests: `ops/k8s/base`
 
 ```bash
 kubectl apply -k ops/k8s/base
 kubectl -n billing-platform get pods,svc,ingress,hpa
 ```
 
-## Testing
-
-Run all tests:
-
-```bash
-./mvnw -B -ntp test
-```
-
-Run module tests:
-
-```bash
-./mvnw -B -ntp -pl usage-service test
-./mvnw -B -ntp -pl invoice-batch-service test
-```
-
 ## Repository Layout
 
 ```text
 .
-├─ billing-platform-common/
-├─ tenant-service/
-├─ usage-service/
-├─ billing-service/
-├─ invoice-batch-service/
-├─ payment-service/
-├─ settlement-service/
-├─ ops/
-├─ perf/
-└─ .github/workflows/
+|- billing-platform-common/
+|- tenant-service/
+|- usage-service/
+|- billing-service/
+|- invoice-batch-service/
+|- payment-service/
+|- settlement-service/
+|- ops/
+|- perf/
+`- .github/workflows/
 ```
