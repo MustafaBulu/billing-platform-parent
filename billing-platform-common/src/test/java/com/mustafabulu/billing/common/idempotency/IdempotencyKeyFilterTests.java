@@ -2,11 +2,11 @@ package com.mustafabulu.billing.common.idempotency;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -25,8 +25,8 @@ class IdempotencyKeyFilterTests {
         request.addHeader(IdempotencyHeaders.IDEMPOTENCY_KEY, "idem-1");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        MockFilterChain chain = new MockFilterChain((req, res) ->
-                assertThat(IdempotencyContextHolder.getIdempotencyKey()).contains("idem-1"));
+        FilterChain chain = (req, res) ->
+                assertThat(IdempotencyContextHolder.getIdempotencyKey()).contains("idem-1");
 
         filter.doFilter(request, response, chain);
 
@@ -39,8 +39,8 @@ class IdempotencyKeyFilterTests {
         request.addHeader(IdempotencyHeaders.IDEMPOTENCY_KEY, " ");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        MockFilterChain chain = new MockFilterChain((req, res) ->
-                assertThat(IdempotencyContextHolder.getIdempotencyKey()).isEmpty());
+        FilterChain chain = (req, res) ->
+                assertThat(IdempotencyContextHolder.getIdempotencyKey()).isEmpty();
 
         filter.doFilter(request, response, chain);
 

@@ -2,11 +2,11 @@ package com.mustafabulu.billing.common.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
-import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -20,10 +20,10 @@ class RequestCorrelationFilterTests {
         request.addHeader(RequestCorrelationFilter.REQUEST_ID_HEADER, "req-1");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        MockFilterChain chain = new MockFilterChain((req, res) -> {
+        FilterChain chain = (req, res) -> {
             assertThat(req.getAttribute(RequestCorrelationFilter.REQUEST_ID_ATTR)).isEqualTo("req-1");
             assertThat(MDC.get(RequestCorrelationFilter.REQUEST_ID_ATTR)).isEqualTo("req-1");
-        });
+        };
 
         filter.doFilter(request, response, chain);
 
