@@ -107,7 +107,6 @@ curl http://localhost:8086/actuator/health/readiness
 
 ```bash
 curl -X POST http://localhost:8081/api/v1/tenants \
-  -H "Authorization: Bearer dev-admin-token" \
   -H "Content-Type: application/json" \
   -d '{"tenantId":"tenant-demo","displayName":"Tenant Demo","currency":"USD"}'
 ```
@@ -116,7 +115,6 @@ curl -X POST http://localhost:8081/api/v1/tenants \
 
 ```bash
 curl -X POST http://localhost:8082/api/v1/usage/events \
-  -H "Authorization: Bearer dev-admin-token" \
   -H "X-Tenant-Id: tenant-demo" \
   -H "Idempotency-Key: usage-1" \
   -H "Content-Type: application/json" \
@@ -127,11 +125,12 @@ curl -X POST http://localhost:8082/api/v1/usage/events \
 
 ```bash
 curl -X POST http://localhost:8084/api/v1/invoices/generate-and-settle \
-  -H "Authorization: Bearer dev-admin-token" \
   -H "X-Tenant-Id: tenant-demo" \
   -H "Content-Type: application/json" \
   -d '{"tenantId":"tenant-demo","customerId":"cust-1","billingPeriod":"2026-02","currency":"USD","lineAmounts":[10.0,5.0],"idempotencyKey":"inv-1"}'
 ```
+
+Auth note: add `Authorization` or `X-API-Key` headers based on your active `platform.security.auth.mode`.
 
 ## Service URLs
 
