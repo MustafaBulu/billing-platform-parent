@@ -36,11 +36,31 @@ public class TenantApplicationService {
     }
 
     private String toTenantCodeBase(String displayName) {
-        String normalized = displayName.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("^-+", "")
-                .replaceAll("-+$", "")
-                .replaceAll("-{2,}", "-");
+        String lowerCase = displayName.toLowerCase(Locale.ROOT);
+        StringBuilder normalizedBuilder = new StringBuilder(lowerCase.length());
+        boolean lastWasDash = false;
+        for (int i = 0; i < lowerCase.length(); i++) {
+            char ch = lowerCase.charAt(i);
+            boolean asciiAlphaNumeric = (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9');
+            if (asciiAlphaNumeric) {
+                normalizedBuilder.append(ch);
+                lastWasDash = false;
+                continue;
+            }
+            if (!lastWasDash) {
+                normalizedBuilder.append('-');
+                lastWasDash = true;
+            }
+        }
+        int start = 0;
+        int end = normalizedBuilder.length();
+        while (start < end && normalizedBuilder.charAt(start) == '-') {
+            start++;
+        }
+        while (end > start && normalizedBuilder.charAt(end - 1) == '-') {
+            end--;
+        }
+        String normalized = normalizedBuilder.substring(start, end);
         return normalized.isBlank() ? "tenant" : normalized;
     }
 
