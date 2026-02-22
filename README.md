@@ -53,24 +53,21 @@ flowchart LR
 
     subgraph CORE[Core Services]
         direction TB
-        T[Tenant Service]
-        U[Usage Service]
-        B[Billing Service]
-        I[Invoice Batch Service]
+        T[Tenant Service] --> TDB[(DB)]
+        U[Usage Service] --> UDB[(DB)]
+        B[Billing Service] --> BDB[(DB)]
+        I[Invoice Batch Service] --> IDB[(DB)]
     end
 
     subgraph SAGA[Saga Services]
         direction TB
-        P[Payment Service]
-        S[Settlement Service]
+        P[Payment Service] --> PDB[(DB)]
+        S[Settlement Service] --> SDB[(DB)]
     end
 
     I <--> K[(Kafka)]
     K <--> P
     K <--> S
-
-    CORE --> DB[(DB)]
-    SAGA --> DB
 
     CORE --> PR[/Prometheus/]
     SAGA --> PR
