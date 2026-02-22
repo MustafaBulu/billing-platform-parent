@@ -13,8 +13,8 @@ class HealthProbeServiceTests {
     void shouldReturnUpStatusPayload() {
         Map<String, Object> payload = healthProbeService.probe();
 
-        assertThat(payload.get("service")).isEqualTo("usage-service");
-        assertThat(payload.get("status")).isEqualTo("UP");
+        assertThat(payload).containsEntry("service", "usage-service");
+        assertThat(payload).containsEntry("status", "UP");
         assertThat(payload.get("timestamp")).isInstanceOf(String.class);
     }
 }
