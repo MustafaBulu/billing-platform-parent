@@ -49,27 +49,15 @@ The project is designed as a practical playground for engineers who want product
 
 ```mermaid
 flowchart LR
-    C[Client] --> T[Tenant Service]
-    C --> U[Usage Service]
-    C --> B[Billing Service]
-    C --> I[Invoice Batch Service]
+    C[Client] --> CORE[Core Services<br/>Tenant, Usage, Billing, Invoice]
+    CORE <--> K[(Kafka)]
+    K <--> SAGA[Saga Services<br/>Payment, Settlement]
 
-    I <--> K[(Kafka)]
-    K <--> P[Payment Service]
-    K <--> S[Settlement Service]
+    CORE --> DB[(DB)]
+    SAGA --> DB
 
-    T --> TDB[(DB)]
-    U --> UDB[(DB)]
-    I --> IDB[(DB)]
-    P --> PDB[(DB)]
-    S --> SDB[(DB)]
-
-    T --> PR[/Prometheus/]
-    U --> PR
-    B --> PR
-    I --> PR
-    P --> PR
-    S --> PR
+    CORE --> PR[/Prometheus/]
+    SAGA --> PR
     PR --> G[Grafana]
 ```
 
