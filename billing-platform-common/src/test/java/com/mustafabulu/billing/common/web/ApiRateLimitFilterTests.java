@@ -3,6 +3,7 @@ package com.mustafabulu.billing.common.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import org.junit.jupiter.api.Test;
@@ -13,8 +14,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 class ApiRateLimitFilterTests {
 
+    private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder()
+            .findAndAddModules()
+            .build();
+
     private ApiRateLimitFilter newFilter(int maxRequests, long windowSeconds) {
-        ApiRateLimitFilter filter = new ApiRateLimitFilter(new ObjectMapper());
+        ApiRateLimitFilter filter = new ApiRateLimitFilter(OBJECT_MAPPER);
         ReflectionTestUtils.setField(filter, "enabled", true);
         ReflectionTestUtils.setField(filter, "maxRequests", maxRequests);
         ReflectionTestUtils.setField(filter, "windowSeconds", windowSeconds);

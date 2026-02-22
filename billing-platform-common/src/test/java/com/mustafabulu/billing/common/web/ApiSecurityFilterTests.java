@@ -3,6 +3,7 @@ package com.mustafabulu.billing.common.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 class ApiSecurityFilterTests {
 
+    private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder()
+            .findAndAddModules()
+            .build();
+
     private ApiSecurityFilter newFilter(String mode,
                                         boolean authzEnabled,
                                         boolean tenantGuardEnabled,
@@ -20,7 +25,7 @@ class ApiSecurityFilterTests {
                                         String bearerTokens,
                                         String tokenScopes,
                                         String tokenTenants) {
-        ApiSecurityFilter filter = new ApiSecurityFilter(new ObjectMapper());
+        ApiSecurityFilter filter = new ApiSecurityFilter(OBJECT_MAPPER);
         ReflectionTestUtils.setField(filter, "authMode", mode);
         ReflectionTestUtils.setField(filter, "authorizationEnabled", authzEnabled);
         ReflectionTestUtils.setField(filter, "tenantGuardEnabled", tenantGuardEnabled);
