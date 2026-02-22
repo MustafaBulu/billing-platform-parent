@@ -104,6 +104,69 @@ class InvoiceOrchestrationServiceTests {
     }
 
     @Test
+    void shouldReplayCompensatedOrchestrationWithCompensatedStatuses() {
+        GenerateInvoiceRequest request = new GenerateInvoiceRequest(
+                TENANT, "customer-1", "2026-02", "USD", List.of(new BigDecimal("15.00")), "idem-compensated");
+        InboxRecordDocument inbox = new InboxRecordDocument();
+        inbox.setOrchestrationId("ORCH-2");
+        OrchestrationRecordDocument orchestration = new OrchestrationRecordDocument();
+        orchestration.setOrchestrationId("ORCH-2");
+        orchestration.setTenantId(TENANT);
+        orchestration.setOperationCode(OPERATION_CODE);
+        orchestration.setIdempotencyKey("idem-compensated");
+        orchestration.setInvoiceId("INV-2");
+        orchestration.setPaymentTransactionId("TX-2");
+        orchestration.setSettlementSagaId("SAGA-2");
+        orchestration.setStatus(OrchestrationStatus.COMPENSATED);
+        orchestration.setUpdatedAt(Instant.parse("2026-02-21T00:00:00Z"));
+        Invoice invoice = invoice("INV-2", new BigDecimal("15.00"));
+
+        when(inboxRecordRepository.findByTenantIdAndOperationCodeAndIdempotencyKey(TENANT, OPERATION_CODE, "idem-compensated"))
+                .thenReturn(Optional.of(inbox));
+        when(orchestrationRecordRepository.findByTenantIdAndOperationCodeAndIdempotencyKey(TENANT, OPERATION_CODE, "idem-compensated"))
+                .thenReturn(Optional.of(orchestration));
+        when(invoiceGenerationService.findById("INV-2")).thenReturn(invoice);
+
+        InvoiceOrchestrationResult result = service.generateAndSettle(request);
+
+        assertThat(result.payment().status()).isEqualTo("COMPENSATED");
+        assertThat(result.settlement().status()).isEqualTo("COMPENSATED");
+        verify(outboxEventRepository, never()).save(any(OutboxEventDocument.class));
+    }
+
+    @Test
+    void shouldReplayFailedOrchestrationWithFailedStatuses() {
+        GenerateInvoiceRequest request = new GenerateInvoiceRequest(
+                TENANT, "customer-1", "2026-02", "USD", List.of(new BigDecimal("15.00")), "idem-failed");
+        InboxRecordDocument inbox = new InboxRecordDocument();
+        inbox.setOrchestrationId("ORCH-3");
+        OrchestrationRecordDocument orchestration = new OrchestrationRecordDocument();
+        orchestration.setOrchestrationId("ORCH-3");
+        orchestration.setTenantId(TENANT);
+        orchestration.setOperationCode(OPERATION_CODE);
+        orchestration.setIdempotencyKey("idem-failed");
+        orchestration.setInvoiceId("INV-3");
+        orchestration.setPaymentTransactionId("TX-3");
+        orchestration.setSettlementSagaId("SAGA-3");
+        orchestration.setStatus(OrchestrationStatus.FAILED);
+        orchestration.setUpdatedAt(Instant.parse("2026-02-21T00:00:00Z"));
+        Invoice invoice = invoice("INV-3", new BigDecimal("15.00"));
+
+        when(inboxRecordRepository.findByTenantIdAndOperationCodeAndIdempotencyKey(TENANT, OPERATION_CODE, "idem-failed"))
+                .thenReturn(Optional.of(inbox));
+        when(orchestrationRecordRepository.findByTenantIdAndOperationCodeAndIdempotencyKey(TENANT, OPERATION_CODE, "idem-failed"))
+                .thenReturn(Optional.of(orchestration));
+        when(invoiceGenerationService.findById("INV-3")).thenReturn(invoice);
+
+        InvoiceOrchestrationResult result = service.generateAndSettle(request);
+
+        assertThat(result.payment().status()).isEqualTo("FAILED");
+        assertThat(result.settlement().status()).isEqualTo("FAILED");
+        assertThat(result.settlement().transitions()).containsExactly("STARTED", "FAILED");
+        verify(outboxEventRepository, never()).save(any(OutboxEventDocument.class));
+    }
+
+    @Test
     void shouldUseGeneratedIdempotencyKeyWhenRequestDoesNotProvideOne() {
         GenerateInvoiceRequest request = new GenerateInvoiceRequest(
                 TENANT, "customer-1", "2026-02", "USD", List.of(new BigDecimal("9.00")), null);

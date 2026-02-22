@@ -136,6 +136,41 @@ class PaymentApplicationServiceTests {
         assertThat(result.providerReference()).isEqualTo("COMPENSATED-idem-6");
     }
 
+    @Test
+    void shouldReturnFailedWhenCompensateTransactionIdMissing() {
+        PaymentResult result = paymentApplicationService.compensate("tenant-1", "idem-7", " ");
+
+        assertThat(result.status()).isEqualTo("FAILED");
+        assertThat(result.providerReference()).isEqualTo("MISSING_TRANSACTION_ID");
+        verify(paymentRecordRepository, never()).findByTenantIdAndTransactionId(any(), any());
+    }
+
+    @Test
+    void shouldReturnFailedWhenCompensatePaymentNotFound() {
+        when(paymentRecordRepository.findByTenantIdAndTransactionId("tenant-1", "TX-8"))
+                .thenReturn(Optional.empty());
+
+        PaymentResult result = paymentApplicationService.compensate("tenant-1", "idem-8", "TX-8");
+
+        assertThat(result.status()).isEqualTo("FAILED");
+        assertThat(result.providerReference()).isEqualTo("PAYMENT_NOT_FOUND");
+    }
+
+    @Test
+    void shouldReturnExistingWhenPaymentAlreadyCompensated() {
+        PaymentRecordDocument existing = persisted(
+                "tenant-1", "tenant-1:PAYMENT_PROCESS:idem-9", "INV-9", "COMPENSATED", "COMPENSATED-idem-9");
+        existing.setTransactionId("TX-9");
+        when(paymentRecordRepository.findByTenantIdAndTransactionId("tenant-1", "TX-9"))
+                .thenReturn(Optional.of(existing));
+
+        PaymentResult result = paymentApplicationService.compensate("tenant-1", "idem-9", "TX-9");
+
+        assertThat(result.status()).isEqualTo("COMPENSATED");
+        assertThat(result.providerReference()).isEqualTo("COMPENSATED-idem-9");
+        verify(paymentRecordRepository, never()).save(any(PaymentRecordDocument.class));
+    }
+
     private static PaymentRecordDocument persisted(String tenantId,
                                                    String idempotencyKey,
                                                    String invoiceId,

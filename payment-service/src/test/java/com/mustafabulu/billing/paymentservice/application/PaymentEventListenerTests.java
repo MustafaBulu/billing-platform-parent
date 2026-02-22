@@ -109,4 +109,55 @@ class PaymentEventListenerTests {
         verify(kafkaTemplate).send(eq(KafkaTopics.PAYMENT_COMPENSATION_RESULT), eq("ORCH-3"), captor.capture());
         assertThat(captor.getValue().status()).isEqualTo("COMPENSATED");
     }
+
+    @Test
+    void shouldPublishFailedCompensationResultWhenServiceReturnsNonCompensatedStatus() {
+        PaymentCompensationRequestedEvent event = new PaymentCompensationRequestedEvent(
+                "evt-4",
+                "tenant-1",
+                "ORCH-4",
+                "idem-4",
+                "TX-4",
+                "SETTLEMENT_FAILED",
+                Instant.parse("2026-02-21T00:00:00Z")
+        );
+        PaymentResult compensationResult = new PaymentResult(
+                "TX-4",
+                "INV-4",
+                new BigDecimal("20.00"),
+                "USD",
+                "SUCCESS",
+                "unexpected",
+                Instant.parse("2026-02-21T00:00:01Z")
+        );
+        when(paymentApplicationService.compensate("tenant-1", "idem-4", "TX-4")).thenReturn(compensationResult);
+
+        listener.onPaymentCompensationRequested(event);
+
+        ArgumentCaptor<PaymentCompensationResultEvent> captor = ArgumentCaptor.forClass(PaymentCompensationResultEvent.class);
+        verify(kafkaTemplate).send(eq(KafkaTopics.PAYMENT_COMPENSATION_RESULT), eq("ORCH-4"), captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo("FAILED");
+    }
+
+    @Test
+    void shouldPublishFailedCompensationResultWhenCompensationThrows() {
+        PaymentCompensationRequestedEvent event = new PaymentCompensationRequestedEvent(
+                "evt-5",
+                "tenant-1",
+                "ORCH-5",
+                "idem-5",
+                "TX-5",
+                "SETTLEMENT_FAILED",
+                Instant.parse("2026-02-21T00:00:00Z")
+        );
+        when(paymentApplicationService.compensate("tenant-1", "idem-5", "TX-5"))
+                .thenThrow(new RuntimeException("compensation down"));
+
+        listener.onPaymentCompensationRequested(event);
+
+        ArgumentCaptor<PaymentCompensationResultEvent> captor = ArgumentCaptor.forClass(PaymentCompensationResultEvent.class);
+        verify(kafkaTemplate).send(eq(KafkaTopics.PAYMENT_COMPENSATION_RESULT), eq("ORCH-5"), captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo("FAILED");
+        assertThat(captor.getValue().reason()).contains("compensation down");
+    }
 }

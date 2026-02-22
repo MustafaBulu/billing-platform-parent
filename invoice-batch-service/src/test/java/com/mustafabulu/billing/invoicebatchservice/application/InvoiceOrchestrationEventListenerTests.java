@@ -155,6 +155,52 @@ class InvoiceOrchestrationEventListenerTests {
         verify(invoiceOrchestrationService).markInboxCompleted("tenant-1", "idem-5", "ORCH-1");
     }
 
+    @Test
+    void shouldMarkFailedWhenCompensationResultIsNotCompensated() {
+        PaymentCompensationResultEvent event = new PaymentCompensationResultEvent(
+                "evt-6",
+                "tenant-1",
+                "ORCH-1",
+                "idem-6",
+                "TX-6",
+                "FAILED",
+                "rollback_failed",
+                Instant.parse("2026-02-21T00:00:00Z")
+        );
+        OrchestrationRecordDocument orchestration = orchestration("tenant-1", "idem-6");
+        orchestration.setStatus(OrchestrationStatus.COMPENSATION_IN_PROGRESS);
+        when(orchestrationRecordRepository.findByTenantIdAndOperationCodeAndIdempotencyKey("tenant-1", OPERATION_CODE, "idem-6"))
+                .thenReturn(Optional.of(orchestration));
+        when(orchestrationRecordRepository.save(any(OrchestrationRecordDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        listener.onPaymentCompensationResult(event);
+
+        verify(orchestrationRecordRepository).save(any(OrchestrationRecordDocument.class));
+        verify(invoiceOrchestrationService).markInboxCompleted("tenant-1", "idem-6", "ORCH-1");
+    }
+
+    @Test
+    void shouldIgnorePaymentResultWhenCorrelationIsMissing() {
+        PaymentResultEvent event = new PaymentResultEvent(
+                "evt-7",
+                "tenant-1",
+                "ORCH-1",
+                "",
+                "INV-1",
+                "TX-7",
+                new BigDecimal("10.00"),
+                "USD",
+                "SUCCESS",
+                "APPROVED-ref",
+                Instant.parse("2026-02-21T00:00:00Z")
+        );
+
+        listener.onPaymentResult(event);
+
+        verify(orchestrationRecordRepository, never()).findByTenantIdAndOperationCodeAndIdempotencyKey(any(), any(), any());
+        verify(invoiceOrchestrationService, never()).writeOutboxEvent(any(OrchestrationRecordDocument.class), any(), any());
+    }
+
     private static OrchestrationRecordDocument orchestration(String tenantId, String idempotencyKey) {
         OrchestrationRecordDocument document = new OrchestrationRecordDocument();
         document.setOrchestrationId("ORCH-1");
