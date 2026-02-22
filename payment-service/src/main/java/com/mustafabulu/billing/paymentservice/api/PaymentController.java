@@ -9,7 +9,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -47,7 +46,7 @@ public class PaymentController {
                     )
             )
     )
-    @ApiResponses({
+    
             @ApiResponse(
                     responseCode = "202",
                     description = "Payment accepted for processing",
@@ -58,14 +57,17 @@ public class PaymentController {
                                     value = "{\"transactionId\":\"txn-19af2\",\"invoiceId\":\"inv-2026-0001\",\"amount\":60.00,\"currency\":\"USD\",\"status\":\"AUTHORIZED\",\"providerReference\":\"sim-gateway-8891\",\"processedAt\":\"2026-02-21T16:30:00Z\"}"
                             )
                     )
-            ),
-            @ApiResponse(
+            )
+    @ApiResponse(
                     responseCode = "400",
                     description = "Invalid request payload",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))
             )
-    })
+    
     public PaymentResult process(@Valid @RequestBody ProcessPaymentRequest request) {
         return paymentApplicationService.process(request);
     }
 }
+
+
+

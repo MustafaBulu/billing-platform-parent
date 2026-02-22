@@ -9,7 +9,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -47,7 +46,7 @@ public class TenantController {
                     )
             )
     )
-    @ApiResponses({
+    
             @ApiResponse(
                     responseCode = "201",
                     description = "Tenant created",
@@ -58,8 +57,8 @@ public class TenantController {
                                     value = "{\"id\":\"67b8d0902c24f41f8f995900\",\"tenantCode\":\"acme-tr\",\"displayName\":\"Acme Turkey\",\"createdAt\":\"2026-02-21T16:30:00Z\"}"
                             )
                     )
-            ),
-            @ApiResponse(
+            )
+    @ApiResponse(
                     responseCode = "400",
                     description = "Invalid request payload",
                     content = @Content(
@@ -70,8 +69,11 @@ public class TenantController {
                             )
                     )
             )
-    })
+    
     public Tenant create(@Valid @RequestBody CreateTenantRequest request) {
         return tenantApplicationService.create(request);
     }
 }
+
+
+

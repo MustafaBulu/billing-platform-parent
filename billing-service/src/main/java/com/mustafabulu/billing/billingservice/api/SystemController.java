@@ -5,7 +5,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,7 +24,7 @@ public class SystemController {
 
     @GetMapping("/health")
     @Operation(summary = "Health probe", description = "Returns service health and basic system metadata.")
-    @ApiResponses({
+    
             @ApiResponse(
                     responseCode = "200",
                     description = "Service is healthy",
@@ -35,8 +34,10 @@ public class SystemController {
                             )
                     )
             )
-    })
+    
     public Map<String, Object> health() {
         return healthProbeService.probe();
     }
 }
+
+

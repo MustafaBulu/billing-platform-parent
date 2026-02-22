@@ -11,7 +11,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -51,7 +50,7 @@ public class SettlementController {
                     )
             )
     )
-    @ApiResponses({
+    
             @ApiResponse(
                     responseCode = "202",
                     description = "Settlement saga started",
@@ -62,31 +61,31 @@ public class SettlementController {
                                     value = "{\"sagaId\":\"saga-8d11\",\"tenantId\":\"acme-tr\",\"invoiceId\":\"inv-2026-0001\",\"paymentTransactionId\":\"txn-19af2\",\"amount\":60.00,\"currency\":\"USD\",\"status\":\"STARTED\",\"transitions\":[\"STARTED\"],\"updatedAt\":\"2026-02-21T16:30:00Z\"}"
                             )
                     )
-            ),
-            @ApiResponse(
+            )
+    @ApiResponse(
                     responseCode = "400",
                     description = "Invalid request payload",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))
             )
-    })
+    
     public SettlementSaga start(@Valid @RequestBody StartSettlementRequest request) {
         return settlementSagaService.start(request);
     }
 
     @GetMapping("/{sagaId}")
     @Operation(summary = "Get settlement saga by id", description = "Returns current status and transitions of a settlement saga.")
-    @ApiResponses({
+    
             @ApiResponse(
                     responseCode = "200",
                     description = "Settlement saga found",
                     content = @Content(schema = @Schema(implementation = SettlementSaga.class))
-            ),
-            @ApiResponse(
+            )
+    @ApiResponse(
                     responseCode = "404",
                     description = "Settlement saga not found",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))
             )
-    })
+    
     public SettlementSaga getById(@Parameter(description = "Settlement saga identifier", example = "saga-8d11")
                                   @PathVariable("sagaId") String sagaId) {
         SettlementSaga saga = settlementSagaService.getById(sagaId);
@@ -96,3 +95,6 @@ public class SettlementController {
         return saga;
     }
 }
+
+
+

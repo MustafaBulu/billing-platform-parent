@@ -64,11 +64,16 @@ public class InvoiceOrchestrationService {
 
     @Transactional
     public InvoiceOrchestrationResult generateAndSettle(GenerateInvoiceRequest request) {
-        return generateAndSettle(request, null);
+        return executeGenerateAndSettle(request, null);
     }
 
     @Transactional
     public InvoiceOrchestrationResult generateAndSettle(GenerateInvoiceRequest request, String authorizationHeader) {
+        return executeGenerateAndSettle(request, authorizationHeader);
+    }
+
+    private InvoiceOrchestrationResult executeGenerateAndSettle(GenerateInvoiceRequest request,
+                                                                String authorizationHeader) {
         String tenantId = request.tenantId();
         String orchestrationIdempotencyKey = buildOrchestrationIdempotencyKey(request);
         String orchestrationId = ensureInbox(tenantId, orchestrationIdempotencyKey);

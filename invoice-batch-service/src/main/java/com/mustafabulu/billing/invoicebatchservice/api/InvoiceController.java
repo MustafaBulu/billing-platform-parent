@@ -12,7 +12,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -57,7 +56,7 @@ public class InvoiceController {
                     )
             )
     )
-    @ApiResponses({
+    
             @ApiResponse(
                     responseCode = "202",
                     description = "Invoice generated",
@@ -68,31 +67,31 @@ public class InvoiceController {
                                     value = "{\"invoiceId\":\"inv-2026-0001\",\"tenantId\":\"acme-tr\",\"customerId\":\"cust-1001\",\"billingPeriod\":\"2026-02\",\"totalAmount\":60.00,\"currency\":\"USD\",\"status\":\"PENDING\",\"createdAt\":\"2026-02-21T16:30:00Z\"}"
                             )
                     )
-            ),
-            @ApiResponse(
+            )
+    @ApiResponse(
                     responseCode = "400",
                     description = "Invalid request payload",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))
             )
-    })
+    
     public Invoice generate(@Valid @RequestBody GenerateInvoiceRequest request) {
         return invoiceGenerationService.generate(request);
     }
 
     @GetMapping("/{invoiceId}")
     @Operation(summary = "Get invoice by id", description = "Returns invoice details by invoice identifier.")
-    @ApiResponses({
+    
             @ApiResponse(
                     responseCode = "200",
                     description = "Invoice found",
                     content = @Content(schema = @Schema(implementation = Invoice.class))
-            ),
-            @ApiResponse(
+            )
+    @ApiResponse(
                     responseCode = "404",
                     description = "Invoice not found",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))
             )
-    })
+    
     public Invoice getById(@PathVariable("invoiceId") String invoiceId) {
         Invoice invoice = invoiceGenerationService.findById(invoiceId);
         if (invoice == null) {
@@ -112,7 +111,7 @@ public class InvoiceController {
                     content = @Content(schema = @Schema(implementation = GenerateInvoiceRequest.class))
             )
     )
-    @ApiResponses({
+    
             @ApiResponse(
                     responseCode = "202",
                     description = "Invoice, payment and settlement returned",
@@ -123,16 +122,19 @@ public class InvoiceController {
                                     value = "{\"invoice\":{\"invoiceId\":\"inv-2026-0001\",\"tenantId\":\"acme-tr\",\"customerId\":\"cust-1001\",\"billingPeriod\":\"2026-02\",\"totalAmount\":60.00,\"currency\":\"USD\",\"status\":\"PENDING\",\"createdAt\":\"2026-02-21T16:30:00Z\"},\"payment\":{\"transactionId\":\"txn-19af2\",\"invoiceId\":\"inv-2026-0001\",\"amount\":60.00,\"currency\":\"USD\",\"status\":\"AUTHORIZED\",\"providerReference\":\"sim-gateway-8891\",\"processedAt\":\"2026-02-21T16:30:01Z\"},\"settlement\":{\"sagaId\":\"saga-8d11\",\"tenantId\":\"acme-tr\",\"invoiceId\":\"inv-2026-0001\",\"paymentTransactionId\":\"txn-19af2\",\"amount\":60.00,\"currency\":\"USD\",\"status\":\"SETTLED\",\"transitions\":[\"STARTED\",\"PAYMENT_CONFIRMED\",\"SETTLED\"],\"updatedAt\":\"2026-02-21T16:30:02Z\"}}"
                             )
                     )
-            ),
-            @ApiResponse(
+            )
+    @ApiResponse(
                     responseCode = "400",
                     description = "Invalid request payload",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))
             )
-    })
+    
     public InvoiceOrchestrationResult generateAndSettle(@Valid @RequestBody GenerateInvoiceRequest request,
                                                         @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
                                                         String authorization) {
         return invoiceOrchestrationService.generateAndSettle(request, authorization);
     }
 }
+
+
+

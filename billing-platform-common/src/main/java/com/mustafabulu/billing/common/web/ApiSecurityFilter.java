@@ -26,6 +26,19 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class ApiSecurityFilter extends OncePerRequestFilter {
+    private static final Set<String> NO_SCOPES = Set.of();
+    private static final ScopeRule[] SCOPE_RULES = new ScopeRule[]{
+            new ScopeRule("POST", "/api/v1/tenants", false, Set.of("tenant:write")),
+            new ScopeRule("POST", "/api/v1/usage/events", false, Set.of("usage:write")),
+            new ScopeRule("GET", "/api/v1/usage/totals/", true, Set.of("usage:read")),
+            new ScopeRule("POST", "/api/v1/billing/rate", false, Set.of("billing:write")),
+            new ScopeRule("POST", "/api/v1/invoices/generate", false, Set.of("invoice:write")),
+            new ScopeRule("POST", "/api/v1/invoices/generate-and-settle", false, Set.of("invoice:settle")),
+            new ScopeRule("GET", "/api/v1/invoices/", true, Set.of("invoice:read")),
+            new ScopeRule("POST", "/api/v1/payments/process", false, Set.of("payment:write")),
+            new ScopeRule("POST", "/api/v1/settlements/start", false, Set.of("settlement:write")),
+            new ScopeRule("GET", "/api/v1/settlements/", true, Set.of("settlement:read"))
+    };
 
     private final ObjectMapper objectMapper;
 
@@ -166,37 +179,14 @@ public class ApiSecurityFilter extends OncePerRequestFilter {
     }
 
     private Set<String> resolveRequiredScopes(String method, String path) {
-        if ("POST".equalsIgnoreCase(method) && "/api/v1/tenants".equals(path)) {
-            return Set.of("tenant:write");
+        String normalizedMethod = method == null ? "" : method.trim().toUpperCase();
+        String normalizedPath = path == null ? "" : path;
+        for (ScopeRule scopeRule : SCOPE_RULES) {
+            if (scopeRule.matches(normalizedMethod, normalizedPath)) {
+                return scopeRule.requiredScopes();
+            }
         }
-        if ("POST".equalsIgnoreCase(method) && "/api/v1/usage/events".equals(path)) {
-            return Set.of("usage:write");
-        }
-        if ("GET".equalsIgnoreCase(method) && path.startsWith("/api/v1/usage/totals/")) {
-            return Set.of("usage:read");
-        }
-        if ("POST".equalsIgnoreCase(method) && "/api/v1/billing/rate".equals(path)) {
-            return Set.of("billing:write");
-        }
-        if ("POST".equalsIgnoreCase(method) && "/api/v1/invoices/generate".equals(path)) {
-            return Set.of("invoice:write");
-        }
-        if ("POST".equalsIgnoreCase(method) && "/api/v1/invoices/generate-and-settle".equals(path)) {
-            return Set.of("invoice:settle");
-        }
-        if ("GET".equalsIgnoreCase(method) && path.startsWith("/api/v1/invoices/")) {
-            return Set.of("invoice:read");
-        }
-        if ("POST".equalsIgnoreCase(method) && "/api/v1/payments/process".equals(path)) {
-            return Set.of("payment:write");
-        }
-        if ("POST".equalsIgnoreCase(method) && "/api/v1/settlements/start".equals(path)) {
-            return Set.of("settlement:write");
-        }
-        if ("GET".equalsIgnoreCase(method) && path.startsWith("/api/v1/settlements/")) {
-            return Set.of("settlement:read");
-        }
-        return Set.of();
+        return NO_SCOPES;
     }
 
     private boolean requiresTenant(String path) {
@@ -286,5 +276,14 @@ public class ApiSecurityFilter extends OncePerRequestFilter {
     }
 
     private record AuthContext(String mode, Set<String> scopes, Set<String> allowedTenants) {
+    }
+
+    private record ScopeRule(String method, String path, boolean prefixMatch, Set<String> requiredScopes) {
+        private boolean matches(String requestMethod, String requestPath) {
+            if (!method.equals(requestMethod)) {
+                return false;
+            }
+            return prefixMatch ? requestPath.startsWith(path) : path.equals(requestPath);
+        }
     }
 }

@@ -10,7 +10,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -49,7 +48,7 @@ public class UsageController {
                     )
             )
     )
-    @ApiResponses({
+    
             @ApiResponse(
                     responseCode = "202",
                     description = "Usage event accepted",
@@ -60,31 +59,31 @@ public class UsageController {
                                     value = "{\"tenantId\":\"acme-tr\",\"customerId\":\"cust-1001\",\"idempotencyKey\":\"usage-evt-0001\",\"metricCode\":\"api_call\",\"quantity\":120,\"occurredAt\":\"2026-02-21T16:30:00Z\"}"
                             )
                     )
-            ),
-            @ApiResponse(
+            )
+    @ApiResponse(
                     responseCode = "400",
                     description = "Invalid request payload",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))
             )
-    })
+    
     public UsageEvent ingest(@Valid @RequestBody UsageEventRequest request) {
         return usageIngestionService.ingest(request);
     }
 
     @GetMapping("/totals/{tenantId}/{customerId}/{metricCode}")
     @Operation(summary = "Get usage total", description = "Returns aggregated quantity for tenant/customer/metric.")
-    @ApiResponses({
+    
             @ApiResponse(
                     responseCode = "200",
                     description = "Current total quantity",
                     content = @Content(schema = @Schema(type = "integer", format = "int64", example = "1200"))
-            ),
-            @ApiResponse(
+            )
+    @ApiResponse(
                     responseCode = "400",
                     description = "Invalid path parameters",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))
             )
-    })
+    
     public long total(@Parameter(description = "Tenant identifier", example = "acme-tr")
                       @PathVariable("tenantId") String tenantId,
                       @Parameter(description = "Customer identifier", example = "cust-1001")
@@ -94,3 +93,6 @@ public class UsageController {
         return usageIngestionService.currentTotal(tenantId, customerId, metricCode);
     }
 }
+
+
+
