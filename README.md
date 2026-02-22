@@ -5,6 +5,7 @@
   <a href="https://spring.io/projects/spring-boot" title="Spring Boot"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/spring/spring-original.svg" width="40" height="40" alt="Spring Boot"/></a>
   <a href="https://maven.apache.org/" title="Maven"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/maven/maven-original.svg" width="40" height="40" alt="Maven"/></a>
   <a href="https://www.mongodb.com/" title="MongoDB"><img src="https://cdn.simpleicons.org/mongodb/47A248" width="40" height="40" alt="MongoDB"/></a>
+  <a href="https://kafka.apache.org/" title="Apache Kafka"><img src="https://cdn.simpleicons.org/apachekafka/231F20" width="40" height="40" alt="Apache Kafka"/></a>
   <a href="https://swagger.io/specification/" title="OpenAPI / Swagger"><img src="https://cdn.simpleicons.org/swagger/85EA2D" width="40" height="40" alt="OpenAPI / Swagger"/></a>
   <a href="https://junit.org/junit5/" title="JUnit 5"><img src="https://cdn.simpleicons.org/junit5/25A162" width="40" height="40" alt="JUnit 5"/></a>
   <a href="https://prometheus.io/" title="Prometheus"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/prometheus/prometheus-original.svg" width="40" height="40" alt="Prometheus"/></a>
@@ -19,7 +20,8 @@ It demonstrates an end-to-end billing lifecycle: tenant onboarding, usage ingest
 The project is designed as a practical playground for engineers who want production-style patterns such as idempotency, outbox/inbox reliability, quality gates, and observability.
 
 - Business scope: tenant, usage, billing, invoice, payment, settlement
-- Reliability patterns: idempotency, saga-like settlement flow, orchestration with outbox/inbox records
+- Reliability patterns: idempotency, event-driven saga-like settlement flow, orchestration with outbox/inbox records
+- Messaging backbone: Apache Kafka (payment/settlement orchestration events)
 - Observability: Prometheus + Grafana + Loki
 - Delivery pipeline: GitHub Actions CI/CD + SonarCloud + Gitleaks
 
@@ -28,6 +30,7 @@ The project is designed as a practical playground for engineers who want product
 - Multi-service domain split with shared cross-cutting layer (`billing-platform-common`)
 - Idempotent write flows for usage ingestion, payment, settlement, and orchestration
 - Outbox/inbox style reliability in invoice orchestration
+- Event-driven orchestration between invoice, payment, and settlement services via Kafka
 - Sonar quality gate and JaCoCo coverage in CI
 
 ## Architecture
