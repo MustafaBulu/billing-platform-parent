@@ -13,8 +13,9 @@ class HealthProbeServiceTests {
     void shouldReturnUpStatusPayload() {
         Map<String, Object> payload = healthProbeService.probe();
 
-        assertThat(payload).containsEntry("service", "usage-service");
-        assertThat(payload).containsEntry("status", "UP");
+        assertThat(payload)
+                .containsEntry("service", "usage-service")
+                .containsEntry("status", "UP");
         assertThat(payload.get("timestamp")).isInstanceOf(String.class);
     }
 }
